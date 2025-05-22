@@ -3741,20 +3741,22 @@ def generate_invoice_for_customer(request):
                 product = ProductsDetails.objects.filter(id=order.product_id).first()
                 if not product:
                     continue
-                price = float(product.price)
+                price = round(float(product.price),2)
                 discount_percent = float(product.discount or 0)
-
-                discount_amount = (price * discount_percent) / 100
+                gst_amount=round(price * product.gst/100,2)
+                discount_amount =round( (price * discount_percent) / 100,2)
                 final_price = price - discount_amount
                 items.append({
                     "product_name": product.product_name,
                     "sku":product.sku_number,
+                    "hsn":product.hsn_code,
                     "quantity": order.quantity,
-                    "price" :product.price,
+                    "price" :price,
+                    "gst_amount":gst_amount,
                     "gst": f"{int(product.gst or 0)}%",
                     "discount_percent": f"{int(discount_percent)}%",
-                    "discount": round(discount_amount, 2),
-                    "gross_amount": round(final_price),
+                    "discount": discount_amount,
+                    # "gross_amount": round(final_price),
                     "final_price": order.final_price,
                     "total_price": round(order.final_price * order.quantity, 2) 
                 })
@@ -3774,10 +3776,9 @@ def generate_invoice_for_customer(request):
                     "phone": address.mobile_number if address else "",
                 },
                 "sold_by": "Pavaman",
-                "gstin": "XXABCDEFGH1Z1",
                 "total_items": len(items),
                 "items": items,
-                "grand_total": payment.total_amount,
+                "grand_total": payment.amount,
                 "payment_mode": payment.payment_mode,
                 
             })

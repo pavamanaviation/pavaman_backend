@@ -61,8 +61,6 @@ class ProductsDetails(models.Model):
     gst = models.FloatField(default=0.0)
     hsn_code = models.CharField(max_length=30, default='')
 
-    #product_url_id = models.CharField(default="")
-
     def __str__(self):
         return self.product_name
 
@@ -78,13 +76,12 @@ class CustomerRegisterDetails(models.Model):
     verification_link = models.CharField(max_length=255, null=True, blank=True)
     admin = models.ForeignKey(PavamanAdminDetails, on_delete=models.CASCADE)
     account_status = models.IntegerField(default=0)
-    otp = models.IntegerField(null=True, blank=True)  # Store OTP
-    otp_send_type = models.CharField(max_length=255, null=True, blank=True)  # Email/SMS
-    reset_link = models.CharField(max_length=255, null=True, blank=True)  # Reset Token
-    changed_on = models.DateTimeField(null=True, blank=True)  # Last Password Reset Time
+    otp = models.IntegerField(null=True, blank=True)
+    otp_send_type = models.CharField(max_length=255, null=True, blank=True)
+    reset_link = models.CharField(max_length=255, null=True, blank=True)
+    changed_on = models.DateTimeField(null=True, blank=True)
     register_type = models.CharField(max_length=20,default='mannual_acc')
     def save(self, *args, **kwargs):
-        # Prevent hashing when password is None (Google Sign-In case)
         if self.password and not self.password.startswith("pbkdf2_sha256$"):
             self.password = make_password(self.password)
         super().save(*args, **kwargs)
@@ -115,7 +112,6 @@ class CartProducts(models.Model):
     quantity = models.PositiveIntegerField(default=1)
     added_at = models.DateTimeField()
     admin = models.ForeignKey(PavamanAdminDetails, on_delete=models.CASCADE)
-
 
     def __str__(self):
         return f"{self.customer} - {self.product} ({self.quantity})"
@@ -148,16 +144,13 @@ class CustomerAddress(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     select_address = models.BooleanField(default=False)
 
-
     def __str__(self):
         return f"{self.first_name} {self.last_name} - {self.address_type} ({self.pincode})"
-
-
 class OrderProducts(models.Model):
     customer = models.ForeignKey(CustomerRegisterDetails, on_delete=models.CASCADE)
     product = models.ForeignKey(ProductsDetails, on_delete=models.CASCADE)
-    category = models.CharField(max_length=255)
-    sub_category = models.CharField(max_length=255)
+    category = models.ForeignKey(CategoryDetails, on_delete=models.CASCADE)
+    sub_category = models.ForeignKey(SubCategoryDetails, on_delete=models.CASCADE) 
     quantity = models.IntegerField()
     price = models.DecimalField(max_digits=10, decimal_places=2)
     final_price = models.DecimalField(max_digits=10, decimal_places=2)
@@ -201,8 +194,6 @@ class PaymentDetails(models.Model):
     product_order_id = models.CharField(default="")
     invoice_number = models.CharField(default="")
     invoice_date = models.DateTimeField(auto_now_add=True,null=True)
-    order_status= models.CharField(default="")
-    Delivery_status = models.CharField(default="")
     
     def str(self):
         return f"Order {self.razorpay_order_id} - {self.payment_type} ({self.payment_mode})"
@@ -214,12 +205,11 @@ class FeedbackRating(models.Model):
     order_product = models.ForeignKey(OrderProducts, on_delete=models.CASCADE)
     order_id = models.CharField(max_length=255) 
     product = models.ForeignKey(ProductsDetails, on_delete=models.CASCADE) 
-    category = models.CharField(max_length=255)
-    sub_category = models.CharField(max_length=255)
+    category = models.ForeignKey(CategoryDetails, on_delete=models.CASCADE)
+    sub_category = models.ForeignKey(SubCategoryDetails, on_delete=models.CASCADE)
     rating = models.PositiveSmallIntegerField() 
     feedback = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def str(self):
         return f"Rating {self.rating} by Customer {self.customer.id} for Product {self.product.name}"
-
