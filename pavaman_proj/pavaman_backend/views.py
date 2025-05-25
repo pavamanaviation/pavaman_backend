@@ -27,6 +27,7 @@ from pavaman_backend.models import (
     SubCategoryDetails, ProductsDetails, PaymentDetails, OrderProducts,
     FeedbackRating, CustomerAddress
 )
+import traceback
 import io
 @csrf_exempt
 def add_admin(request):
@@ -38,27 +39,21 @@ def add_admin(request):
             mobile_no = data.get('mobile_no')
             password = data.get('password')
             status = data.get('status', 1)
-
             if not username or not email or not password:
                 return JsonResponse({"error": "Username, email, and password are required.", "status_code": 400}, status=400)
-
             if PavamanAdminDetails.objects.filter(username=username).exists():
                 return JsonResponse({"error": "Username already exists. Please choose a different username.", "status_code": 409}, status=409)
-
             if PavamanAdminDetails.objects.filter(email=email).exists():
                 return JsonResponse({"error": "Email already exists. Please use a different email.", "status_code": 409}, status=409)
-
             admin = PavamanAdminDetails(username=username, email=email, password=password, status=int(status))
             admin.save()
             return JsonResponse({"message": "Admin added successfully", "id": admin.id, "status_code": 201}, status=201)
-
         except json.JSONDecodeError:
             return JsonResponse({"error": "Invalid JSON data in the request body.", "status_code": 400}, status=400)
         except IntegrityError:
             return JsonResponse({"error": "Database integrity error.", "status_code": 500}, status=500)
         except Exception as e:
             return JsonResponse({"error": f"An unexpected error occurred: {str(e)}", "status_code": 500}, status=500)
-
     return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
 @csrf_exempt
 def admin_login(request):
@@ -67,23 +62,18 @@ def admin_login(request):
             data = json.loads(request.body)
             email = data.get('email', '').strip().lower()
             password = data.get('password', '')
-
             if not email or not password:
                 return JsonResponse({"error": "Email and password are required.", "status_code": 400}, status=400)
-
             admin = PavamanAdminDetails.objects.filter(email=email).first()
-
             if not admin:
                 return JsonResponse({"error": "Email not found.", "status_code": 404}, status=404)
             if admin.password != password:
                 return JsonResponse({"error": "Invalid email or password.", "status_code": 401}, status=401)
-
             if admin.status != 1:
                 return JsonResponse({"error": "Your account is inactive. Contact support.", "status_code": 403}, status=403)
             otp = random.randint(100000, 999999)
             admin.otp = otp
             admin.save()
-            
             success = send_otp_sms(admin.mobile_no, otp)
             if not success:
                 return JsonResponse({"error": "Failed to send OTP. Try again later.", "status_code": 500}, status=500)
@@ -96,9 +86,7 @@ def admin_login(request):
             return JsonResponse({"error": "Invalid JSON data in the request body.", "status_code": 400}, status=400)
         except Exception as e:
             return JsonResponse({"error": f"An unexpected error occurred: {str(e)}", "status_code": 500}, status=500)
-
     return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
-
 @csrf_exempt
 def admin_verify_otp(request):
     if request.method == "POST":
@@ -106,10 +94,8 @@ def admin_verify_otp(request):
             data = json.loads(request.body)
             email = data.get("email")
             otp = data.get("otp")
-
             if not email or not otp:
                 return JsonResponse({"error": "Email and OTP are required.", "status_code": 400}, status=400)
-
             admin = PavamanAdminDetails.objects.filter(email=email).first()
             if not admin:
                 return JsonResponse({"error": "Invalid email.", "status_code": 404}, status=404)
@@ -117,7 +103,6 @@ def admin_verify_otp(request):
                 return JsonResponse({"error": "Invalid OTP.", "status_code": 401}, status=401)
             admin.otp = None
             admin.save()
-
             request.session['admin_id'] = admin.id
             request.session['admin_email'] = admin.email
             request.session['admin_username'] = admin.username
@@ -127,16 +112,16 @@ def admin_verify_otp(request):
             return JsonResponse({"error": "Invalid JSON data.", "status_code": 400}, status=400)
         except Exception as e:
             return JsonResponse({"error": f"Unexpected error: {str(e)}", "status_code": 500}, status=500)
-
     return JsonResponse({"error": "Only POST method allowed.", "status_code": 405}, status=405)
-
 def send_otp_sms(mobile_no, otp):
+    import traceback
     message = f"Your OTP for admin login is: {otp}"
     try:
         send_bulk_sms([mobile_no], message)
         return True
     except Exception as e:
         print(f"Failed to send OTP to {mobile_no}: {e}")
+        traceback.print_exc()
         return False
 @csrf_exempt
 def admin_logout(request):
@@ -147,13 +132,9 @@ def admin_logout(request):
                 return JsonResponse({"message": "Logout successful.", "status_code": 200}, status=200)
             else:
                 return JsonResponse({"error": "No active session found.", "status_code": 400}, status=400)
-
         except Exception as e:
             return JsonResponse({"error": f"An unexpected error occurred: {str(e)}", "status_code": 500}, status=500)
-
     return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
-
-
 @csrf_exempt
 def add_category(request):
     if request.method == 'POST':
@@ -162,25 +143,20 @@ def add_category(request):
             category_name = data.get('category_name')
             admin_id = data.get('admin_id')
             category_status = 1
-
             if not admin_id:
                 return JsonResponse({"error": "Admin is not logged in.", "status_code": 401}, status=401)
-
             try:
                 admin_data = PavamanAdminDetails.objects.get(id=admin_id)
             except PavamanAdminDetails.DoesNotExist:
                 return JsonResponse({"error": "Admin session expired or invalid.", "status_code": 401}, status=401)
-
             if CategoryDetails.objects.filter(category_name=category_name).exists():
                 return JsonResponse({"error": "Category name already exists.", "status_code": 409}, status=409)
-
             if 'category_image' not in request.FILES:
                 return JsonResponse({"error": "Category image file is required.", "status_code": 400}, status=400)
             category_image = request.FILES['category_image']
             allowed_extensions = ['png', 'jpg', 'jpeg']
             file_name, file_extension = os.path.splitext(category_image.name)
             file_extension = file_extension.lower().lstrip('.')
-
             if file_extension not in allowed_extensions:
                 return JsonResponse({
                     "error": f"Invalid file type. Allowed types: {', '.join(allowed_extensions)}",
@@ -201,9 +177,7 @@ def add_category(request):
                 s3_file_key,
                 ExtraArgs={'ContentType': category_image.content_type}
             )
-
             image_url = f"https://{settings.AWS_STORAGE_BUCKET_NAME}.s3.{settings.AWS_S3_REGION_NAME}.amazonaws.com/{s3_file_key}"
-
             current_time = datetime.utcnow() + timedelta(hours=5, minutes=30)
             category = CategoryDetails(
                 category_name=category_name,
@@ -213,7 +187,6 @@ def add_category(request):
                 created_at=current_time
             )
             category.save()
-
             return JsonResponse({
                 "message": "Category added successfully",
                 "category_id": category.id,
@@ -221,34 +194,26 @@ def add_category(request):
                 "category_status": category.category_status,
                 "status_code": 201
             }, status=201)
-
         except Exception as e:
             return JsonResponse({
                 "error": f"An unexpected error occurred: {str(e)}",
                 "status_code": 500
             }, status=500)
-
     return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
-
 @csrf_exempt
 def view_categories(request):
     if request.method == 'POST':
         try:
             data = json.loads(request.body)
             admin_id = data.get('admin_id')
-
             if not admin_id:
                 return JsonResponse({"error": "Admin Id is required.", "status_code": 400}, status=400)
-
             admin_data = PavamanAdminDetails.objects.filter(id=admin_id).first()
             if not admin_data:
                 return JsonResponse({"error": "Admin not found or session expired.", "status_code": 401}, status=401)
-
             categories = CategoryDetails.objects.filter(admin_id=admin_id, category_status=1)
-
             if not categories.exists():
                 return JsonResponse({"message": "No category details found", "status_code": 200}, status=200)
-
             category_list = []
             for category in categories:
                 image_url = f"https://{settings.AWS_STORAGE_BUCKET_NAME}.s3.{settings.AWS_S3_REGION_NAME}.amazonaws.com/{category.category_image}"
@@ -257,20 +222,15 @@ def view_categories(request):
                     "category_name": category.category_name,
                     "category_image_url": image_url
                 })
-
-
             return JsonResponse(
                 {"message": "Categories retrieved successfully.", "categories": category_list, "status_code": 200},
                 status=200
             )
-
         except json.JSONDecodeError:
             return JsonResponse({"error": "Invalid JSON data.", "status_code": 400}, status=400)
         except Exception as e:
             return JsonResponse({"error": f"An unexpected error occurred: {str(e)}", "status_code": 500}, status=500)
-
     return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
-
 @csrf_exempt
 def edit_category(request):
     if request.method == 'POST':
@@ -279,37 +239,28 @@ def edit_category(request):
             category_id = data.get('category_id')
             category_name = data.get('category_name').lower()
             admin_id = data.get('admin_id')
-
             if not admin_id:
                 return JsonResponse({"error": "Admin is not logged in.", "status_code": 401}, status=401)
             if not category_id:
                 return JsonResponse({"error": "Category ID is required.", "status_code": 400}, status=400)
-
             admin_data = PavamanAdminDetails.objects.filter(id=admin_id).first()
             if not admin_data:
                 return JsonResponse({"error": "Admin not found or session expired.", "status_code": 401}, status=401)
-
             category = CategoryDetails.objects.filter(id=category_id, admin=admin_data, category_status=1).first()
             if not category:
                 return JsonResponse({"error": "Category not found.", "status_code": 404}, status=404)
-
             if CategoryDetails.objects.filter(category_name=category_name).exclude(id=category_id).exists():
                 return JsonResponse({"error": "Category name already exists.", "status_code": 409}, status=409)
-
             category.category_name = category_name
-
             formatted_category_name = category_name.replace(' ', '_').replace('/', '_')
-
             s3 = boto3.client(
                 's3',
                 aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
                 aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
                 region_name=settings.AWS_S3_REGION_NAME
             )
-
             if 'category_image' in request.FILES:
                 category_image = request.FILES['category_image']
-
                 allowed_extensions = ['png', 'jpg', 'jpeg']
                 file_extension = category_image.name.split('.')[-1].lower()
                 if file_extension not in allowed_extensions:
@@ -317,30 +268,24 @@ def edit_category(request):
                         "error": f"Invalid file type. Allowed types: {', '.join(allowed_extensions)}",
                         "status_code": 400
                     }, status=400)
-
                 image_name = f"{formatted_category_name}_{category_image.name}"
                 s3_file_key = f"static/images/category/{image_name}"
-
                 if category.category_image:
                     try:
                         s3.delete_object(Bucket=settings.AWS_STORAGE_BUCKET_NAME, Key=category.category_image)
                     except Exception as delete_err:
                         print("Warning: Could not delete old image:", delete_err)
-
                 s3.upload_fileobj(
                     category_image,
                     settings.AWS_STORAGE_BUCKET_NAME,
                     s3_file_key,
                     ExtraArgs={'ContentType': category_image.content_type}
                 )
-
                 category.category_image = s3_file_key
-
             elif category.category_image:
                 old_key = category.category_image
                 original_file_name = old_key.split('/')[-1].split('_')[-1] 
                 new_key = f"static/images/category/{formatted_category_name}_{original_file_name}"
-
                 if old_key != new_key:
                     try:
                         s3.copy_object(
@@ -354,11 +299,8 @@ def edit_category(request):
                         category.category_image = new_key
                     except Exception as rename_err:
                         print("Warning: Could not rename image on S3:", rename_err)
-
             category.save()
-
             image_url = f"https://{settings.AWS_STORAGE_BUCKET_NAME}.s3.{settings.AWS_S3_REGION_NAME}.amazonaws.com/{category.category_image}" if category.category_image else None
-
             return JsonResponse({
                 "message": "Category updated successfully.",
                 "category_id": str(category.id),
@@ -366,12 +308,9 @@ def edit_category(request):
                 "category_image_url": image_url,
                 "status_code": 200
             }, status=200)
-
         except Exception as e:
             return JsonResponse({"error": f"An unexpected error occurred: {str(e)}", "status_code": 500}, status=500)
-
     return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
-
 @csrf_exempt
 def delete_category(request):
     if request.method == 'POST':
@@ -380,22 +319,16 @@ def delete_category(request):
                 data = json.loads(request.body)
             except json.JSONDecodeError:
                 return JsonResponse({"error": "Invalid JSON data.", "status_code": 400}, status=400)
-
             category_id = data.get('category_id')
             admin_id = data.get('admin_id')
-
             print(f"Admin ID: {admin_id}, Category ID: {category_id}")
-
             if not admin_id:
                 return JsonResponse({"error": "Admin is not logged in.", "status_code": 401}, status=401)
-
             if not category_id:
                 return JsonResponse({"error": "Category ID is required.", "status_code": 400}, status=400)
-
             admin_data = PavamanAdminDetails.objects.filter(id=admin_id).first()
             if not admin_data:
                 return JsonResponse({"error": "Admin not found or session expired.", "status_code": 401}, status=401)
-
             category = CategoryDetails.objects.filter(id=category_id, admin=admin_data).first()
             if not category:
                 return JsonResponse({"error": "Category not found or you do not have permission to delete this category.", "status_code": 404}, status=404)
@@ -406,7 +339,6 @@ def delete_category(request):
                     aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
                     region_name=settings.AWS_S3_REGION_NAME
                 )
-
                 try:
                     s3.delete_object(
                         Bucket=settings.AWS_STORAGE_BUCKET_NAME,
@@ -415,67 +347,52 @@ def delete_category(request):
                 except ClientError as e:
                     print(f"S3 deletion error: {e}")
             category.delete()
-
             return JsonResponse({
                 "message": "Category deleted successfully.",
                 "status_code": 200
             }, status=200)
-
         except Exception as e:
             return JsonResponse({"error": f"An unexpected error occurred: {str(e)}", "status_code": 500}, status=500)
-
     return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
-
-
 @csrf_exempt
 def add_subcategory(request):
     if request.method == 'POST':
         try:
             data = request.POST
-
             sub_category_name = data.get('sub_category_name') 
             category_id = data.get('category_id')
             admin_id = data.get('admin_id')
             sub_category_status = 1
-
             if not sub_category_name:
                 return JsonResponse({"error": "Subcategory name is required.", "status_code": 400}, status=400)
             if not admin_id:
                 return JsonResponse({"error": "Admin is not logged in.", "status_code": 401}, status=401)
-
             sub_category_name = sub_category_name.lower()
-
             try:
                 admin_data = PavamanAdminDetails.objects.get(id=admin_id)
             except PavamanAdminDetails.DoesNotExist:
                 return JsonResponse({"error": "Admin session expired or invalid.", "status_code": 401}, status=401)
-
             try:
                 category = CategoryDetails.objects.get(id=category_id, admin=admin_data)
             except CategoryDetails.DoesNotExist:
                 return JsonResponse({"error": "Category not found.", "status_code": 404}, status=404)
-
             if SubCategoryDetails.objects.filter(sub_category_name=sub_category_name, category=category).exists():
                 return JsonResponse({
                     "error": f"Subcategory '{sub_category_name}' already exists under category '{category.category_name}'.",
                     "status_code": 409
                 }, status=409)
-
             existing_subcategory = SubCategoryDetails.objects.filter(sub_category_name=sub_category_name).exclude(category=category).first()
             if existing_subcategory:
                 return JsonResponse({
                     "error": f"Subcategory '{sub_category_name}' already exists under a different category '{existing_subcategory.category.category_name}'.",
                     "status_code": 409
                 }, status=409)
-
             sub_category_image = request.FILES.get('sub_category_image', None)
             if not sub_category_image:
                 return JsonResponse({"error": "Subcategory image file is required.", "status_code": 400}, status=400)
-
             allowed_extensions = ['png', 'jpg', 'jpeg']
             file_name, file_extension = os.path.splitext(sub_category_image.name)
             file_extension = file_extension.lower().lstrip('.') 
-
             if file_extension not in allowed_extensions:
                 return JsonResponse({
                     "error": f"Invalid file type. Allowed types: {', '.join(allowed_extensions)}",
@@ -496,11 +413,8 @@ def add_subcategory(request):
                 s3_file_key,
                 ExtraArgs={'ContentType': sub_category_image.content_type}
             )
-
             image_url = f"https://{settings.AWS_STORAGE_BUCKET_NAME}.s3.{settings.AWS_S3_REGION_NAME}.amazonaws.com/{s3_file_key}"
-
             current_time = datetime.utcnow() + timedelta(hours=5, minutes=30)
-
             subcategory = SubCategoryDetails(
                 sub_category_name=sub_category_name,
                 category=category,
@@ -510,7 +424,6 @@ def add_subcategory(request):
                 created_at=current_time
             )
             subcategory.save()
-
             return JsonResponse({
                 "message": "Subcategory added successfully",
                 "subcategory_id": subcategory.id,
@@ -520,12 +433,9 @@ def add_subcategory(request):
                 "subcategory_status": subcategory.sub_category_status,
                 "status_code": 201
             }, status=201)
-
         except Exception as e:
             return JsonResponse({"error": f"An unexpected error occurred: {str(e)}", "status_code": 500}, status=500)
-
     return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
-
 @csrf_exempt
 def view_subcategories(request):
     if request.method == 'POST':
@@ -533,13 +443,11 @@ def view_subcategories(request):
             data = json.loads(request.body.decode('utf-8'))
             admin_id = data.get('admin_id')
             category_id = data.get('category_id')
-
             if not admin_id or not category_id:
                 return JsonResponse({
                     "error": "Admin id and Category id are required.",
                     "status_code": 400
                 }, status=400)
-
             try:
                 admin = PavamanAdminDetails.objects.get(id=admin_id)
                 category = CategoryDetails.objects.get(id=category_id, admin=admin)
@@ -547,29 +455,24 @@ def view_subcategories(request):
                 return JsonResponse({"error": "Admin not found or session expired.", "status_code": 404}, status=404)
             except CategoryDetails.DoesNotExist:
                 return JsonResponse({"error": "Category not found.", "status_code": 404}, status=404)
-
             subcategories = SubCategoryDetails.objects.filter(category=category)
-
             subcategory_list = []
             for subcat in subcategories:
                 if subcat.sub_category_image:
                     image_url = f"https://{settings.AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com/{subcat.sub_category_image}"
                 else:
                     image_url = None
-
                 subcategory_list.append({
                     'id': subcat.id,
                     'sub_category_name': subcat.sub_category_name,
                     'sub_category_image': image_url,
                 })
-
             if not subcategory_list:
                 return JsonResponse({
                     "message": "No subcategories found.",
                     "status_code": 200,
                     "subcategories": []
                 }, status=200)
-
             return JsonResponse({
                 "message": "Subcategories retrieved successfully.",
                 "status_code": 200,
@@ -577,7 +480,6 @@ def view_subcategories(request):
                 "category_name": category.category_name,
                 "subcategories": subcategory_list
             }, status=200)
-
         except json.JSONDecodeError:
             return JsonResponse({
                 "error": "Invalid JSON format.",
@@ -590,8 +492,6 @@ def view_subcategories(request):
             }, status=500)
 
     return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
-
-
 @csrf_exempt
 def edit_subcategory(request):
     if request.method == 'POST':
@@ -601,36 +501,29 @@ def edit_subcategory(request):
             sub_category_name = data.get('subcategory_name').lower()
             category_id = data.get('category_id')
             admin_id = data.get('admin_id')
-
             if not admin_id:
                 return JsonResponse({"error": "Admin is not logged in.", "status_code": 401}, status=401)
             if not subcategory_id:
                 return JsonResponse({"error": "Subcategory ID is required.", "status_code": 400}, status=400)
             if not sub_category_name:
                 return JsonResponse({"error": "Subcategory Name is required.", "status_code": 400}, status=400)
-
             admin_data = PavamanAdminDetails.objects.filter(id=admin_id).first()
             if not admin_data:
                 return JsonResponse({"error": "Admin not found or session expired.", "status_code": 401}, status=401)
-
             category = CategoryDetails.objects.filter(id=category_id, admin=admin_data).first()
             if not category:
                 return JsonResponse({"error": "Category not found.", "status_code": 404}, status=404)
-
             subcategory = SubCategoryDetails.objects.filter(id=subcategory_id, category=category).first()
             if not subcategory:
                 return JsonResponse({"error": "Subcategory not found.", "status_code": 404}, status=404)
-
             existing_subcategory = SubCategoryDetails.objects.filter(
                 sub_category_name=sub_category_name, category=category
             ).exclude(id=subcategory_id).first()
-
             if existing_subcategory:
                 return JsonResponse({
                     "error": f"Subcategory name already exists under {category.category_name}",
                     "status_code": 409
                 }, status=409)
-
             subcategory.sub_category_name = sub_category_name
             formatted_sub_name = sub_category_name.replace(' ', '_').replace('/', '_')
             s3 = boto3.client(
@@ -639,15 +532,12 @@ def edit_subcategory(request):
                 aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
                 region_name=settings.AWS_S3_REGION_NAME
             )
-
             if 'sub_category_image' in request.FILES:
                 subcategory_image = request.FILES['sub_category_image']
-
                 allowed_extensions = ['png', 'jpg', 'jpeg']
                 file_extension = subcategory_image.name.split('.')[-1].lower()
                 if file_extension not in allowed_extensions:
                     return JsonResponse({"error": f"Invalid file type. Allowed types: {', '.join(allowed_extensions)}", "status_code": 400}, status=400)
-
                 image_name = f"{formatted_sub_name}_{subcategory_image.name}"
                 s3_file_key = f"static/images/subcategory/{image_name}"
                 if subcategory.sub_category_image:
@@ -662,12 +552,10 @@ def edit_subcategory(request):
                     ExtraArgs={'ContentType': subcategory_image.content_type}
                 )
                 subcategory.sub_category_image = s3_file_key
-
             elif subcategory.sub_category_image:
                 old_key = subcategory.sub_category_image
                 original_file_name = old_key.split('/')[-1].split('_')[-1]
                 new_key = f"static/images/subcategory/{formatted_sub_name}_{original_file_name}"
-
                 if old_key != new_key:
                     try:
                         s3.copy_object(
@@ -681,11 +569,8 @@ def edit_subcategory(request):
                         subcategory.sub_category_image = new_key
                     except Exception as e:
                         print("Warning: Failed to rename subcategory image:", e)
-
             subcategory.save()
-
             image_url = f"https://{settings.AWS_STORAGE_BUCKET_NAME}.s3.{settings.AWS_S3_REGION_NAME}.amazonaws.com/{subcategory.sub_category_image}" if subcategory.sub_category_image else None
-
             return JsonResponse({
                 "message": "Subcategory updated successfully.",
                 "category_id": subcategory.category.id,
@@ -695,12 +580,9 @@ def edit_subcategory(request):
                 "subcategory_image_url": image_url,
                 "status_code": 200
             }, status=200)
-
         except Exception as e:
             return JsonResponse({"error": f"An unexpected error occurred: {str(e)}", "status_code": 500}, status=500)
-
     return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
-
 @csrf_exempt
 def delete_subcategory(request):
     if request.method == 'POST':
@@ -709,30 +591,22 @@ def delete_subcategory(request):
                 data = json.loads(request.body)
             except json.JSONDecodeError:
                 return JsonResponse({"error": "Invalid JSON data.", "status_code": 400}, status=400)
-
             subcategory_id = data.get('subcategory_id')
             category_id = data.get('category_id')
             admin_id = data.get('admin_id')
-
             print(f"Admin ID: {admin_id}, Category ID: {category_id}, Subcategory ID: {subcategory_id}")
-
             if not admin_id:
                 return JsonResponse({"error": "Admin is not logged in.", "status_code": 401}, status=401)
-
             if not category_id:
                 return JsonResponse({"error": "Category ID is required.", "status_code": 400}, status=400)
-
             if not subcategory_id:
                 return JsonResponse({"error": "Subcategory ID is required.", "status_code": 400}, status=400)
-
             admin_data = PavamanAdminDetails.objects.filter(id=admin_id).first()
             if not admin_data:
                 return JsonResponse({"error": "Admin not found or session expired.", "status_code": 401}, status=401)
-
             category = CategoryDetails.objects.filter(id=category_id, admin=admin_data).first()
             if not category:
                 return JsonResponse({"error": "Category not found under this admin.", "status_code": 404}, status=404)
-
             subcategory = SubCategoryDetails.objects.filter(id=subcategory_id, category=category).first()
             if not subcategory:
                 return JsonResponse({"error": "Subcategory not found.", "status_code": 404}, status=404)
@@ -755,12 +629,9 @@ def delete_subcategory(request):
                 "message": "Subcategory deleted successfully.",
                 "status_code": 200
             }, status=200)
-
         except Exception as e:
             return JsonResponse({"error": f"An unexpected error occurred: {str(e)}", "status_code": 500}, status=500)
-
     return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
-
 @csrf_exempt
 def add_product(request):
     if request.method == 'POST':
@@ -772,7 +643,6 @@ def add_product(request):
                     return JsonResponse({"error": "Invalid JSON format.", "status_code": 400}, status=400)
             else:
                 data = request.POST.dict()
-
             product_name = data.get('product_name').lower()
             sku_number = data.get('sku_number')
             hsn_code=data.get('hsn_code')
@@ -784,48 +654,36 @@ def add_product(request):
             admin_id = data.get('admin_id')
             category_id = data.get('category_id')
             sub_category_id = data.get('sub_category_id')
-
             if not all([product_name, sku_number,hsn_code, price, quantity, description, admin_id, category_id, sub_category_id]):
                 return JsonResponse({"error": "Missing required fields.", "status_code": 400}, status=400)
-
             try:
                 price = float(price)
                 quantity = int(quantity)
                 discount = int(discount)
                 gst = float(gst)
-
                 if discount > price:
                     return JsonResponse({"error": "Discount amount cannot be more than the price.", "status_code": 400}, status=400)
-                
             except ValueError:
                 return JsonResponse({"error": "Invalid format for price, quantity, or discount.", "status_code": 400}, status=400)
-
             availability = "Out of Stock" if quantity == 0 else "Very Few Products Left" if quantity <= 10 else "In Stock"
-
             try:
                 admin = PavamanAdminDetails.objects.get(id=admin_id)
             except PavamanAdminDetails.DoesNotExist:
                 return JsonResponse({"error": "Admin not found.", "status_code": 401}, status=401)
-
             try:
                 category = CategoryDetails.objects.get(id=category_id, admin=admin)
             except CategoryDetails.DoesNotExist:
                 return JsonResponse({"error": "Category not found", "status_code": 404}, status=404)
-
             try:
                 sub_category = SubCategoryDetails.objects.get(id=sub_category_id, category=category)
             except SubCategoryDetails.DoesNotExist:
                 return JsonResponse({"error": "Sub-category not found.", "status_code": 404}, status=404)
-
             if ProductsDetails.objects.filter(product_name=product_name).exists():
                 return JsonResponse({"error": "Product name already exists.", "status_code": 409}, status=409)
-
             if ProductsDetails.objects.filter(sku_number=sku_number).exists():
                 return JsonResponse({"error": "SKU number already exists.", "status_code": 409}, status=409)
-
             if 'product_images' not in request.FILES:
                 return JsonResponse({"error": "Product images are required.", "status_code": 400}, status=400)
-
             image_files = request.FILES.getlist('product_images')
             if not image_files:
                 return JsonResponse({"error": "At least one product image is required.", "status_code": 400}, status=400)
@@ -835,16 +693,13 @@ def add_product(request):
                 aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
                 region_name=settings.AWS_S3_REGION_NAME
             )
-
             product_images = []
             allowed_image_extensions = ['png', 'jpg', 'jpeg']
             for image in image_files:
                 file_extension = image.name.split('.')[-1].lower()
                 if file_extension not in allowed_image_extensions:
                     return JsonResponse({"error": f"Invalid image file type. Allowed types: {', '.join(allowed_image_extensions)}", "status_code": 400}, status=400)
-
                 s3_key = f"static/images/products/{product_name.replace(' ', '_')}/{sku_number}_{image.name}"
-
                 try:
                     s3.upload_fileobj(
                         image,
@@ -854,21 +709,15 @@ def add_product(request):
                     )
                 except ClientError as e:
                     return JsonResponse({"error": f"Failed to upload product image: {str(e)}", "status_code": 500}, status=500)
-
                 product_images.append(s3_key)
-
             if 'material_file' not in request.FILES:
                 return JsonResponse({"error": "Material file is required.", "status_code": 400}, status=400)
-
             material_file = request.FILES['material_file']
             allowed_material_extensions = ['pdf', 'doc']
             file_extension = material_file.name.split('.')[-1].lower()
-
             if file_extension not in allowed_material_extensions:
                 return JsonResponse({"error": f"Invalid material file type. Allowed types: {', '.join(allowed_material_extensions)}", "status_code": 400}, status=400)
-
             material_key = f"static/materials/{product_name.replace(' ', '_')}.{file_extension}"
-
             try:
                 s3.upload_fileobj(
                     material_file,
@@ -878,9 +727,7 @@ def add_product(request):
                 )
             except ClientError as e:
                 return JsonResponse({"error": f"Failed to upload material file: {str(e)}", "status_code": 500}, status=500)
-
-            current_time = datetime.utcnow() + timedelta(hours=5, minutes=30)
-            
+            current_time = datetime.utcnow() + timedelta(hours=5, minutes=30)            
             product = ProductsDetails(
                 product_name=product_name,
                 sku_number=sku_number,
@@ -901,7 +748,6 @@ def add_product(request):
                 cart_status=False
             )
             product.save()
-
             return JsonResponse({
                 "message": "Product added successfully.",
                 "category_id": str(product.category.id),
@@ -914,34 +760,27 @@ def add_product(request):
                 "gst": f"{int(product.gst)}%" if isinstance(product.gst, (int, float)) else product.gst,
                 "status_code": 201
             }, status=201)
-
         except Exception as e:
             return JsonResponse({"error": f"Unexpected error: {str(e)}", "status_code": 500}, status=500)
-
     return JsonResponse({"error": "Invalid request method. Only POST is allowed.", "status_code": 405}, status=405)
-
 @csrf_exempt
 def upload_products_excel(request):
     if request.method != 'POST':
         return JsonResponse({"error": "Invalid request method."}, status=405)
-
     excel_file = request.FILES.get('excel_file')
     if not excel_file:
         return JsonResponse({"error": "Excel file is required."}, status=400)
     category_id = request.POST.get('category_id')
     sub_category_id = request.POST.get('sub_category_id')
     admin_id = request.POST.get('admin_id')
-
     if not all([category_id, sub_category_id, admin_id]):
         return JsonResponse({"error": "category_id, sub_category_id, and admin_id are required in POST data."}, status=400)
-
     try:
         admin = PavamanAdminDetails.objects.get(id=admin_id)
         category = CategoryDetails.objects.get(id=category_id, admin=admin)
         sub_category = SubCategoryDetails.objects.get(id=sub_category_id, category=category)
     except Exception as e:
         return JsonResponse({"error": f"Invalid admin/category/sub-category: {str(e)}"}, status=400)
-
     wb = openpyxl.load_workbook(excel_file)
     ws = wb.active
     headers = [cell.value for cell in ws[1]]
@@ -949,20 +788,16 @@ def upload_products_excel(request):
     all_material_names = []
     for i, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
         row_data = dict(zip(headers, row))
-        
         image_names = str(row_data.get('image_paths') or '').split(',')
         for img_name in image_names:
             img_name = img_name.strip()
             if img_name:
                 all_image_names.append(img_name.lower())  # case-insensitive check
-                
         material_name = str(row_data.get('material_paths') or '').strip()
         if material_name:
             all_material_names.append(material_name.lower())
-
     duplicates_images = set([x for x in all_image_names if all_image_names.count(x) > 1])
     duplicates_materials = set([x for x in all_material_names if all_material_names.count(x) > 1])
-
     if duplicates_images or duplicates_materials:
         error_parts = []
         if duplicates_images:
@@ -975,20 +810,17 @@ def upload_products_excel(request):
         }, status=400)
     uploaded_images = {f.name: f for f in request.FILES.getlist('images[]')}
     uploaded_materials = {f.name: f for f in request.FILES.getlist('materials[]')}
-
     s3 = boto3.client(
         's3',
         aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
         aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
         region_name=settings.AWS_S3_REGION_NAME
     )
-
     product_responses = []
     for i, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
         try:
             if all(cell is None or str(cell).strip() == '' for cell in row):
                 continue
-
             row_data = dict(zip(headers, row))
             product_name = row_data.get('product_name')
             if not product_name:
@@ -1034,7 +866,6 @@ def upload_products_excel(request):
                     )
                 except ClientError as e:
                     return JsonResponse({"error": f"Failed to upload image {img_name} on row {i}: {str(e)}"}, status=500)
-
                 s3_image_keys.append(s3_key)
             material_name = str(row_data.get('material_paths') or '').strip()
             s3_material_key = None
@@ -1059,13 +890,11 @@ def upload_products_excel(request):
                     return JsonResponse({"error": f"Failed to upload material on row {i}: {str(e)}","products": product_responses,}, status=500)
             specifications_str = str(row_data.get('specifications') or '').strip().rstrip(';')
             specs_list = [spec for spec in specifications_str.split(';') if spec]
-
             specifications_dict = {}
             for spec in specs_list:
                 if ':' in spec:
                     key, value = spec.split(':', 1)
                     specifications_dict[key.strip()] = value.strip()
-
             number_of_specifications = len(specifications_dict)
             product = ProductsDetails.objects.create(
                 product_name=product_name,
@@ -1086,11 +915,9 @@ def upload_products_excel(request):
                 product_images=s3_image_keys,
                 material_file=s3_material_key,
                 specifications=specifications_dict,
-
                 number_of_specifications=number_of_specifications
             )
             product_responses.append({
-                
                 "category_id":str(category_id),
                 "su_category_id":str(sub_category_id),
                 "product_id": str(product.id),
@@ -1102,17 +929,13 @@ def upload_products_excel(request):
                 "specifications": product.specifications,
                 "number_of_specifications": product.number_of_specifications
             })
-
         except Exception as e:
             return JsonResponse({"error": f"Error in row {i}: {str(e)}"}, status=500)
-
     return JsonResponse({
         "message": "All products uploaded successfully.",
         "products": product_responses,
         "admin_id":str(admin_id),
     }, status=200)
-
-
 @csrf_exempt
 def add_product_specifications(request):
     if request.method == 'POST':
@@ -1121,57 +944,46 @@ def add_product_specifications(request):
                 data = json.loads(request.body.decode('utf-8'))
             except json.JSONDecodeError:
                 return JsonResponse({"error": "Invalid JSON format.", "status_code": 400}, status=400)
-
             admin_id = data.get('admin_id')
             category_id = data.get('category_id')
             sub_category_id = data.get('sub_category_id')
             product_id = data.get('product_id')
             new_specifications = data.get('specifications', [])
-
             if not all([admin_id, category_id, sub_category_id, product_id]):
                 return JsonResponse({"error": "Missing required fields.", "status_code": 400}, status=400)
             try:
                 admin = PavamanAdminDetails.objects.get(id=admin_id)
             except PavamanAdminDetails.DoesNotExist:
                 return JsonResponse({"error": "Admin not found.", "status_code": 401}, status=401)
-
             try:
                 category = CategoryDetails.objects.get(id=category_id, admin=admin)
             except CategoryDetails.DoesNotExist:
                 return JsonResponse({"error": "Category not found for this admin.", "status_code": 404}, status=404)
-
             try:
                 sub_category = SubCategoryDetails.objects.get(id=sub_category_id, category=category)
             except SubCategoryDetails.DoesNotExist:
                 return JsonResponse({"error": "Subcategory not found for this category.", "status_code": 404}, status=404)
-
             try:
                 product = ProductsDetails.objects.get(id=product_id, category=category, sub_category=sub_category)
             except ProductsDetails.DoesNotExist:
                 return JsonResponse({"error": "Product not found.", "status_code": 404}, status=404)
             if not isinstance(new_specifications, list):
                 return JsonResponse({"error": "Specifications must be a list of objects.", "status_code": 400}, status=400)
-
             existing_specifications = product.specifications or {}
-
             for spec in new_specifications:
                 if "name" in spec and "value" in spec:
                     spec_name = spec["name"]
-                    
                     if spec_name in existing_specifications:
                         return JsonResponse({
                             "error": f"Specification '{spec_name}' already exists.",
                             "status_code": 400
                         }, status=400)
-                    
                     existing_specifications[spec_name] = spec["value"]
                 else:
                     return JsonResponse({"error": "Each specification must contain 'name' and 'value'.", "status_code": 400}, status=400)
-
             product.specifications = existing_specifications
             product.number_of_specifications = len(existing_specifications)
             product.save()
-
             return JsonResponse({
                 "message": "New specifications added successfully.",
                 "product_id": str(product.id),
@@ -1179,12 +991,9 @@ def add_product_specifications(request):
                 "specifications": product.specifications,
                 "status_code": 200
             }, status=200)
-
         except Exception as e:
             return JsonResponse({"error": f"Unexpected error: {str(e)}", "status_code": 500}, status=500)
-
     return JsonResponse({"error": "Invalid request method. Only POST is allowed.", "status_code": 405}, status=405)
-
 @csrf_exempt
 def edit_product_specifications(request):
     if request.method == 'POST':
@@ -1193,7 +1002,6 @@ def edit_product_specifications(request):
                 data = json.loads(request.body.decode('utf-8'))
             except json.JSONDecodeError:
                 return JsonResponse({"error": "Invalid JSON format.", "status_code": 400}, status=400)
-
             admin_id = data.get('admin_id')
             category_id = data.get('category_id')
             sub_category_id = data.get('sub_category_id')
@@ -1201,42 +1009,33 @@ def edit_product_specifications(request):
             new_specifications = data.get('specifications', [])
             if not all([admin_id, category_id, sub_category_id, product_id]):
                 return JsonResponse({"error": "Missing required fields.", "status_code": 400}, status=400)
-
             try:
                 admin = PavamanAdminDetails.objects.get(id=admin_id)
             except PavamanAdminDetails.DoesNotExist:
                 return JsonResponse({"error": "Admin not found.", "status_code": 401}, status=401)
-
             try:
                 category = CategoryDetails.objects.get(id=category_id, admin=admin)
             except CategoryDetails.DoesNotExist:
                 return JsonResponse({"error": "Category not found for this admin.", "status_code": 404}, status=404)
-
             try:
                 sub_category = SubCategoryDetails.objects.get(id=sub_category_id, category=category)
             except SubCategoryDetails.DoesNotExist:
                 return JsonResponse({"error": "Subcategory not found for this category.", "status_code": 404}, status=404)
-
             try:
                 product = ProductsDetails.objects.get(id=product_id, category=category, sub_category=sub_category)
             except ProductsDetails.DoesNotExist:
                 return JsonResponse({"error": "Product not found.", "status_code": 404}, status=404)
-
             if not isinstance(new_specifications, list):
                 return JsonResponse({"error": "Specifications must be a list of objects.", "status_code": 400}, status=400)
-
             existing_specifications = product.specifications or {}
-
             for spec in new_specifications:
                 if "name" in spec and "value" in spec:
                     existing_specifications[spec["name"]] = spec["value"]
                 else:
                     return JsonResponse({"error": "Each specification must contain 'name' and 'value'.", "status_code": 400}, status=400)
-
             product.specifications = existing_specifications
             product.number_of_specifications = len(existing_specifications)
             product.save()
-
             return JsonResponse({
                 "message": "Specifications updated successfully.",
                 "product_id": str(product.id),
@@ -1244,12 +1043,9 @@ def edit_product_specifications(request):
                 "specifications": product.specifications,
                 "status_code": 200
             }, status=200)
-
         except Exception as e:
             return JsonResponse({"error": f"Unexpected error: {str(e)}", "status_code": 500}, status=500)
-
     return JsonResponse({"error": "Invalid request method. Only POST is allowed.", "status_code": 405}, status=405)
-
 @csrf_exempt
 def view_products(request):
     if request.method == 'POST':
@@ -1258,13 +1054,11 @@ def view_products(request):
             admin_id = data.get('admin_id')
             category_id = data.get('category_id')
             sub_category_id = data.get('sub_category_id')
-
             if not admin_id or not category_id or not sub_category_id:
                 return JsonResponse({
                     "error": "admin_id, category_id, and sub_category_id are required.",
                     "status_code": 400
                 }, status=400)
-
             try:
                 admin = PavamanAdminDetails.objects.get(id=admin_id)
                 category = CategoryDetails.objects.get(id=category_id, admin=admin)
@@ -1275,23 +1069,19 @@ def view_products(request):
                 return JsonResponse({"error": "Category not found.", "status_code": 404}, status=404)
             except SubCategoryDetails.DoesNotExist:
                 return JsonResponse({"error": "Subcategory not found.", "status_code": 404}, status=404)
-
             products = ProductsDetails.objects.filter(
                 admin=admin, category=category, sub_category=sub_category
             ).values(
                 'id', 'product_name', 'sku_number','hsn_code', 'price', 'availability', 'quantity', 'cart_status','product_images','discount','gst','description'
             )
-
             product_list = []
             for product in products:
                 image_url = None
                 if product['product_images']:
                     image_url = f"https://{settings.AWS_STORAGE_BUCKET_NAME}.s3.{settings.AWS_S3_REGION_NAME}.amazonaws.com/{product['product_images'][0]}"
-
                 price = round(float(product['price']), 2)
                 discount = round(float(product.get('discount') or 0), 2)
                 gst = round(float(product.get('gst') or 0), 2)
-
                 discount_amount = round(price * (discount / 100), 2)
                 final_price = round(price - discount_amount, 2)
                 product_list.append({
@@ -1309,7 +1099,6 @@ def view_products(request):
                     "product_discount": f"{int(discount)}%",
                     "product_description":product['description']
                 })
-
             return JsonResponse({
                 "message": "Products retrieved successfully.",
                 "status_code": 200,
@@ -1319,14 +1108,11 @@ def view_products(request):
                 "sub_category_name": sub_category.sub_category_name,
                 "products": product_list
             }, status=200)
-
         except json.JSONDecodeError:
             return JsonResponse({"error": "Invalid JSON format.", "status_code": 400}, status=400)
         except Exception as e:
             return JsonResponse({"error": f"An unexpected error occurred: {str(e)}", "status_code": 500}, status=500)
-
     return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
-
 @csrf_exempt
 def view_product_details(request):
     if request.method == 'POST':
@@ -1336,7 +1122,6 @@ def view_product_details(request):
             category_id = data.get('category_id')
             sub_category_id = data.get('sub_category_id')
             product_id = data.get('product_id')
-
             if not all([admin_id, category_id, sub_category_id, product_id]):
                 return JsonResponse({
                     "error": "admin_id, category_id, sub_category_id, and product_id are required.",
@@ -1355,21 +1140,16 @@ def view_product_details(request):
                 return JsonResponse({"error": "Subcategory not found.", "status_code": 404}, status=404)
             except ProductsDetails.DoesNotExist:
                 return JsonResponse({"error": "Product not found.", "status_code": 404}, status=404)
-
             price = round(float(product.price), 2)
             discount = round(float(product.discount or 0))
             gst = round(float(product.gst or 0))
             discount_amount = round(price * (discount / 100), 2)
             final_price = round(price - discount_amount, 2)
-
             image_urls = []
             if product.product_images:
                 for image in product.product_images:
                     image_url = f"https://{settings.AWS_STORAGE_BUCKET_NAME}.s3.{settings.AWS_S3_REGION_NAME}.amazonaws.com/{image}"
                     image_urls.append(image_url)
-
-
-                    
             product_data = {
                 "product_id": str(product.id),
                 "product_name": product.product_name,
@@ -1388,7 +1168,6 @@ def view_product_details(request):
                 "number_of_specifications": product.number_of_specifications,
                 "specifications": product.specifications,
             }
-
             return JsonResponse({
                 "message": "Product details retrieved successfully.",
                 "status_code": 200,
@@ -1398,14 +1177,12 @@ def view_product_details(request):
                 "sub_category_name": sub_category.sub_category_name,
                 "product_details": product_data
             }, status=200)
-
         except json.JSONDecodeError:
             return JsonResponse({"error": "Invalid JSON format.", "status_code": 400}, status=400)
         except Exception as e:
             return JsonResponse({"error": f"An unexpected error occurred: {str(e)}", "status_code": 500}, status=500)
 
     return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
-
 @csrf_exempt
 def edit_product(request):
     if request.method == 'POST':
@@ -1417,6 +1194,7 @@ def edit_product(request):
                     return JsonResponse({"error": "Invalid JSON format.", "status_code": 400}, status=400)
             else:
                 data = request.POST.dict()
+
             admin_id = data.get('admin_id')
             category_id = data.get('category_id')
             sub_category_id = data.get('sub_category_id')
@@ -1429,7 +1207,7 @@ def edit_product(request):
             discount = data.get('discount', 0.0)
             description = data.get('description')
             gst = float(data.get('gst', 0.0))
-            if not all([admin_id, category_id, sub_category_id, product_id, product_name, sku_number,hsn_code, price, quantity, description]):
+            if not all([admin_id, category_id, sub_category_id, product_id, product_name, sku_number, hsn_code, price, quantity, description]):
                 return JsonResponse({"error": "Missing required fields.", "status_code": 400}, status=400)
             try:
                 price = float(price)
@@ -1461,47 +1239,69 @@ def edit_product(request):
             if ProductsDetails.objects.exclude(id=product_id).filter(product_name=product_name).exists():
                 return JsonResponse({"error": "Product name already exists.", "status_code": 400}, status=400)
             old_product_name = product.product_name
+            old_sku_number = product.sku_number
             product.product_name = product_name
             product.sku_number = sku_number
-            product.hsn_code=hsn_code
+            product.hsn_code = hsn_code
             product.price = price
             product.quantity = quantity
             product.discount = discount
-            product.gst=gst
+            product.gst = gst
             product.description = description
             product.availability = availability
             product.cart_status = False
+            s3 = boto3.client(
+                's3',
+                aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+                aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+                region_name=settings.AWS_S3_REGION_NAME
+            )
             product_images = []
+            old_folder = f"static/images/products/{old_product_name.replace(' ', '_').replace('/', '_')}"
+            new_folder = f"static/images/products/{product_name.replace(' ', '_').replace('/', '_')}"
+            if old_product_name != product_name or old_sku_number != sku_number:
+                try:
+                    response = s3.list_objects_v2(Bucket=settings.AWS_STORAGE_BUCKET_NAME, Prefix=old_folder)
+                    if 'Contents' in response:
+                        for obj in response['Contents']:
+                            old_key = obj['Key']
+                            filename = old_key.split('/')[-1]
+                            if old_sku_number in filename:
+                                new_filename = filename.replace(old_sku_number, sku_number)
+                            else:
+                                new_filename = f"{sku_number}_{filename}"
+                            new_key = f"{new_folder}/{new_filename}"
+                            s3.copy_object(
+                                Bucket=settings.AWS_STORAGE_BUCKET_NAME,
+                                CopySource={'Bucket': settings.AWS_STORAGE_BUCKET_NAME, 'Key': old_key},
+                                Key=new_key,
+                                ContentType=obj.get('ContentType', 'image/jpeg')
+                            )
+                            product_images.append(new_key)
+                        s3.delete_objects(Bucket=settings.AWS_STORAGE_BUCKET_NAME, Delete={
+                            'Objects': [{'Key': obj['Key']} for obj in response['Contents']]
+                        })
+                except Exception as move_err:
+                    print("Warning: Failed to rename/move images:", str(move_err))
             if 'product_images' in request.FILES:
+                product_images = []
+                try:
+                    response = s3.list_objects_v2(Bucket=settings.AWS_STORAGE_BUCKET_NAME, Prefix=new_folder)
+                    if 'Contents' in response:
+                        s3.delete_objects(Bucket=settings.AWS_STORAGE_BUCKET_NAME, Delete={
+                            'Objects': [{'Key': obj['Key']} for obj in response['Contents']]
+                        })
+                except Exception as del_err:
+                    print("Warning: Failed to delete existing images:", str(del_err))
+  
                 image_files = request.FILES.getlist('product_images')
-                if old_product_name != product_name:
-                    old_product_folder = f"static/images/products/{old_product_name.replace(' ', '_').replace('/', '_')}"
-                    new_product_folder = f"static/images/products/{product_name.replace(' ', '_').replace('/', '_')}"
-                    s3 = boto3.client(
-                        's3',
-                        aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-                        aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-                        region_name=settings.AWS_S3_REGION_NAME
-                    )
-                    try:
-                        response = s3.list_objects_v2(Bucket=settings.AWS_STORAGE_BUCKET_NAME, Prefix=old_product_folder)
-                        if 'Contents' in response:
-                            objects_to_delete = [{'Key': obj['Key']} for obj in response['Contents']]
-                            s3.delete_objects(Bucket=settings.AWS_STORAGE_BUCKET_NAME, Delete={'Objects': objects_to_delete})
-                    except Exception as delete_err:
-                        print("Warning: Could not delete old product images from S3:", str(delete_err))
-
-                else:
-                    new_product_folder = f"static/images/products/{product_name.replace(' ', '_').replace('/', '_')}"
                 for image in image_files:
                     allowed_extensions = ['png', 'jpg', 'jpeg']
                     file_extension = image.name.split('.')[-1].lower()
                     if file_extension not in allowed_extensions:
                         return JsonResponse({"error": f"Invalid file type. Allowed types: {', '.join(allowed_extensions)}", "status_code": 400}, status=400)
-
                     safe_image_name = f"{sku_number}_{image.name.replace(' ', '_').replace('/', '_')}"
-                    s3_file_key = f"{new_product_folder}/{safe_image_name}"
-
+                    s3_file_key = f"{new_folder}/{safe_image_name}"
                     try:
                         s3.upload_fileobj(
                             image,
@@ -1509,23 +1309,33 @@ def edit_product(request):
                             s3_file_key,
                             ExtraArgs={'ContentType': image.content_type}
                         )
-
                         product_images.append(s3_file_key)
                     except Exception as e:
                         return JsonResponse({"error": f"Failed to upload image to S3: {str(e)}", "status_code": 500}, status=500)
-
             product.product_images = product_images
+            if old_product_name != product_name and product.material_file:
+                old_material_key = product.material_file
+                file_extension = old_material_key.split('.')[-1]  # e.g., 'pdf'
+                new_material_key = f"static/materials/{product_name}.{file_extension}"
+                try:
+                    s3.copy_object(
+                        Bucket=settings.AWS_STORAGE_BUCKET_NAME,
+                        CopySource={'Bucket': settings.AWS_STORAGE_BUCKET_NAME, 'Key': old_material_key},
+                        Key=new_material_key,
+                        ContentType='application/pdf' if file_extension == 'pdf' else 'application/msword'
+                    )
+                    s3.delete_object(Bucket=settings.AWS_STORAGE_BUCKET_NAME, Key=old_material_key)
+                    product.material_file = new_material_key
+                except Exception as rename_err:
+                    print("Warning: Failed to rename material file:", str(rename_err))
             if 'material_file' in request.FILES:
                 material_file = request.FILES['material_file']
                 allowed_extensions = ['pdf', 'doc']
                 file_extension = material_file.name.split('.')[-1].lower()
-
                 if file_extension not in allowed_extensions:
                     return JsonResponse({"error": f"Invalid material file type. Allowed types: {', '.join(allowed_extensions)}", "status_code": 400}, status=400)
-
                 safe_material_name = f"{product_name}.{file_extension}"
                 s3_material_key = f"static/materials/{safe_material_name}"
-
                 try:
                     s3.upload_fileobj(
                         material_file,
@@ -1533,14 +1343,11 @@ def edit_product(request):
                         s3_material_key,
                         ExtraArgs={'ContentType': material_file.content_type}
                     )
-
                     product.material_file = s3_material_key
                 except Exception as e:
                     return JsonResponse({"error": f"Failed to upload material file to S3: {str(e)}", "status_code": 500}, status=500)
-            
             final_price = price - (price * discount / 100)
             product.save()
-
             return JsonResponse({
                 "message": "Product updated successfully.",
                 "category_id": str(product.category.id),
@@ -1553,174 +1360,16 @@ def edit_product(request):
                 "price": round(price, 2),
                 "discount": round(discount, 2),
                 "gst": round(gst, 2),
-                "hsn_code":hsn_code,
-                "sku_number":sku_number,
-                "final_price": round(final_price , 2),
+                "hsn_code": hsn_code,
+                "sku_number": sku_number,
+                "final_price": round(final_price, 2),
                 "status_code": 200
             }, status=200)
 
         except Exception as e:
             return JsonResponse({"error": f"Unexpected error: {str(e)}", "status_code": 500}, status=500)
-
     else:
         return JsonResponse({"error": "Invalid request method. Only POST is allowed.", "status_code": 405}, status=405)
-
-# @csrf_exempt
-# def edit_product(request):
-#     if request.method == 'POST':
-#         try:
-#             # Check if request is JSON
-#             if request.content_type == "application/json":
-#                 try:
-#                     data = json.loads(request.body.decode('utf-8'))
-#                 except json.JSONDecodeError:
-#                     return JsonResponse({"error": "Invalid JSON format.", "status_code": 400}, status=400)
-#             else:
-#                 data = request.POST.dict()
-
-#             # Extract required fields
-#             admin_id = data.get('admin_id')
-#             category_id = data.get('category_id')
-#             sub_category_id = data.get('sub_category_id')
-#             product_id = data.get('product_id')
-#             product_name = data.get('product_name').lower()
-#             sku_number = data.get('sku_number')
-#             price = data.get('price')
-#             quantity = data.get('quantity')
-#             discount = data.get('discount', 0.0)
-#             description = data.get('description')
-
-#             # Ensure all required fields are present
-#             if not all([admin_id, category_id, sub_category_id, product_id, product_name, sku_number, price, quantity, description]):
-#                 return JsonResponse({"error": "Missing required fields.", "status_code": 400}, status=400)
-
-#             # Convert price, quantity, and discount to proper types
-#             try:
-#                 price = float(price)
-#                 quantity = int(quantity)
-#                 discount = float(discount)
-#             except ValueError:
-#                 return JsonResponse({"error": "Invalid format for price, quantity, or discount.", "status_code": 400}, status=400)
-
-#             # Validate discount: it should not be greater than the price
-#             if discount > price:
-#                 return JsonResponse({"error": "Discount cannot be greater than the price.", "status_code": 400}, status=400)
-
-#             # Determine product availability
-#             availability = "In Stock" if quantity > 5 else "Very Few Products Left" if quantity > 0 else "Out of Stock"
-
-#             # Validate admin
-#             try:
-#                 admin = PavamanAdminDetails.objects.get(id=admin_id)
-#             except PavamanAdminDetails.DoesNotExist:
-#                 return JsonResponse({"error": "Admin not found.", "status_code": 401}, status=401)
-
-#             # Validate category
-#             try:
-#                 category = CategoryDetails.objects.get(id=category_id, admin=admin)
-#             except CategoryDetails.DoesNotExist:
-#                 return JsonResponse({"error": "Category not found.", "status_code": 404}, status=404)
-
-#             # Validate sub-category
-#             try:
-#                 sub_category = SubCategoryDetails.objects.get(id=sub_category_id, category=category)
-#             except SubCategoryDetails.DoesNotExist:
-#                 return JsonResponse({"error": "Subcategory not found.", "status_code": 404}, status=404)
-
-#             # Validate product
-#             try:
-#                 product = ProductsDetails.objects.get(id=product_id, category=category, sub_category=sub_category)
-#             except ProductsDetails.DoesNotExist:
-#                 return JsonResponse({"error": "Product not found.", "status_code": 404}, status=404)
-
-#             # Ensure SKU number is unique
-#             if ProductsDetails.objects.exclude(id=product_id).filter(sku_number=sku_number).exists():
-#                 return JsonResponse({"error": "SKU number already exists.", "status_code": 400}, status=400)
-
-#             # Ensure Product Name is unique
-#             if ProductsDetails.objects.exclude(id=product_id).filter(product_name=product_name).exists():
-#                 return JsonResponse({"error": "Product name already exists.", "status_code": 400}, status=400)
-
-#             # Update product details
-#             old_product_name = product.product_name
-#             product.product_name = product_name
-#             product.sku_number = sku_number
-#             product.price = price
-#             product.quantity = quantity
-#             product.discount = discount
-#             product.description = description
-#             product.availability = availability
-#             product.cart_status = False  # Ensure cart_status is always False when updating
-
-#             # Handle product images upload
-#             product_images = []
-#             if 'product_images' in request.FILES:
-#                 image_files = request.FILES.getlist('product_images')
-
-#                 old_product_folder = f"static/images/products/{old_product_name.replace(' ', '_')}"
-#                 new_product_folder = f"static/images/products/{product_name.replace(' ', '_')}"
-
-#                 new_product_folder_path = os.path.join(settings.BASE_DIR, new_product_folder)
-#                 os.makedirs(new_product_folder_path, exist_ok=True)
-
-#                 for image in image_files:
-#                     allowed_extensions = ['png', 'jpg', 'jpeg']
-#                     file_extension = image.name.split('.')[-1].lower()
-#                     if file_extension not in allowed_extensions:
-#                         return JsonResponse({"error": f"Invalid file type. Allowed types: {', '.join(allowed_extensions)}", "status_code": 400}, status=400)
-
-#                     image_name = f"{sku_number}_{image.name}"
-#                     image_path = os.path.join(new_product_folder_path, image_name)
-
-#                     with open(image_path, 'wb') as f:
-#                         for chunk in image.chunks():
-#                             f.write(chunk)
-
-#                     product_images.append(f"{new_product_folder}/{image_name}")
-
-#             product.product_images = product_images
-
-#             # Handle material file upload
-#             if 'material_file' in request.FILES:
-#                 material_file = request.FILES['material_file']
-#                 allowed_extensions = ['pdf', 'doc']
-#                 file_extension = material_file.name.split('.')[-1].lower()
-
-#                 if file_extension not in allowed_extensions:
-#                     return JsonResponse({"error": f"Invalid material file type. Allowed types: {', '.join(allowed_extensions)}", "status_code": 400}, status=400)
-
-#                 material_file_name = f"{product_name.replace(' ', '_')}.{file_extension}"
-#                 material_image_path = f'static/materials/{material_file_name}'
-#                 material_image_full_path = os.path.join(settings.BASE_DIR, material_image_path)
-#                 os.makedirs(os.path.dirname(material_image_full_path), exist_ok=True)
-
-#                 with open(material_image_full_path, 'wb') as f:
-#                     for chunk in material_file.chunks():
-#                         f.write(chunk)
-
-#                 product.material_file = material_image_path
-
-#             # Save the updated product details
-#             product.save()
-
-#             return JsonResponse({
-#                 "message": "Product updated successfully.",
-#                 "category_id": str(product.category.id),
-#                 "category_name": product.category.category_name,
-#                 "subcategory_id": str(product.sub_category.id),
-#                 "sub_category_name": product.sub_category.sub_category_name,
-#                 "product_id": str(product.id),
-#                 "availability": availability,
-#                 "cart_status": product.cart_status,  # Always False after update
-#                 "status_code": 200
-#             }, status=200)
-
-#         except Exception as e:
-#             return JsonResponse({"error": f"Unexpected error: {str(e)}", "status_code": 500}, status=500)
-
-#     else:
-#         return JsonResponse({"error": "Invalid request method. Only POST is allowed.", "status_code": 405}, status=405)
-
 @csrf_exempt
 def delete_product(request):
     if request.method == 'POST':
@@ -1732,35 +1381,28 @@ def delete_product(request):
                     return JsonResponse({"error": "Invalid JSON format.", "status_code": 400}, status=400)
             else:
                 data = request.POST.dict()
-
             admin_id = data.get('admin_id')
             category_id = data.get('category_id')
             sub_category_id = data.get('sub_category_id')
             product_id = data.get('product_id')
-
             if not all([admin_id, category_id, sub_category_id, product_id]):
                 return JsonResponse({"error": "Missing required fields.", "status_code": 400}, status=400)
-
             try:
                 admin = PavamanAdminDetails.objects.get(id=admin_id)
             except PavamanAdminDetails.DoesNotExist:
                 return JsonResponse({"error": "Admin not found.", "status_code": 401}, status=401)
-
             try:
                 category = CategoryDetails.objects.get(id=category_id, admin=admin)
             except CategoryDetails.DoesNotExist:
                 return JsonResponse({"error": "Category not found.", "status_code": 404}, status=404)
-
             try:
                 sub_category = SubCategoryDetails.objects.get(id=sub_category_id, category=category)
             except SubCategoryDetails.DoesNotExist:
                 return JsonResponse({"error": "Sub-category not found.", "status_code": 404}, status=404)
-
             try:
                 product = ProductsDetails.objects.get(id=product_id, category=category, sub_category=sub_category)
             except ProductsDetails.DoesNotExist:
                 return JsonResponse({"error": "Product not found.", "status_code": 404}, status=404)
-
             s3 = boto3.client(
                 's3',
                 aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
@@ -1768,7 +1410,6 @@ def delete_product(request):
                 region_name=settings.AWS_S3_REGION_NAME
             )
             product_folder_prefix = f"static/images/products/{product.product_name.replace(' ', '_')}/"
-
             try:
                 response = s3.list_objects_v2(
                     Bucket=settings.AWS_STORAGE_BUCKET_NAME,
@@ -1777,10 +1418,8 @@ def delete_product(request):
                 if 'Contents' in response:
                     for item in response['Contents']:
                         s3.delete_object(Bucket=settings.AWS_STORAGE_BUCKET_NAME, Key=item['Key'])
-
             except ClientError as e:
                 print(f"Error deleting product folder from S3: {e}")
-
             if product.material_file:
                 try:
                     s3.delete_object(
@@ -1789,17 +1428,14 @@ def delete_product(request):
                     )
                 except ClientError as e:
                     print(f"Error deleting material file from S3: {e}")
-
             product.delete()
             return JsonResponse({
                 "message": "Product and associated files deleted successfully.",
                 "product_id": product_id,
                 "status_code": 200
             }, status=200)
-
         except Exception as e:
             return JsonResponse({"error": f"Unexpected error: {str(e)}", "status_code": 500}, status=500)
-
     return JsonResponse({"error": "Invalid request method. Only POST is allowed.", "status_code": 405}, status=405)
 @csrf_exempt
 def search_categories(request):
@@ -1808,23 +1444,18 @@ def search_categories(request):
             data = json.loads(request.body)
             admin_id = data.get('admin_id')
             search_query = data.get('category_name', '').strip()
-
             if not admin_id:
                 return JsonResponse({"error": "Admin Id is required.", "status_code": 400}, status=400)
-
             if not search_query:
                 return JsonResponse({"error": "Atleast one character is required.", "status_code": 400}, status=400)
-
             admin_data = PavamanAdminDetails.objects.filter(id=admin_id).first()
             if not admin_data:
                 return JsonResponse({"error": "Admin not found or session expired.", "status_code": 401}, status=401)
-
             categories = CategoryDetails.objects.filter(
                 admin_id=admin_id,
                 category_status=1,
                 category_name__icontains=search_query
             )
-
             if not categories.exists():
                 return JsonResponse({"message": "No category details found", "status_code": 200}, status=200)
             category_list = []
@@ -1839,12 +1470,10 @@ def search_categories(request):
                 {"message": "Categories retrieved successfully.", "categories": category_list, "status_code": 200},
                 status=200
             )
-
         except json.JSONDecodeError:
             return JsonResponse({"error": "Invalid JSON data.", "status_code": 400}, status=400)
         except Exception as e:
             return JsonResponse({"error": f"An unexpected error occurred: {str(e)}", "status_code": 500}, status=500)
-
     return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
 @csrf_exempt
 def search_subcategories(request):
@@ -1854,27 +1483,21 @@ def search_subcategories(request):
             admin_id = data.get('admin_id')
             category_id = data.get('category_id')
             sub_category_name = data.get('sub_category_name', '').strip()
-
             if not admin_id:
                 return JsonResponse({"error": "Admin Id is required.", "status_code": 400}, status=400)
-
             if not category_id:
                 return JsonResponse({"error": "Category Id is required.", "status_code": 400}, status=400)
-
             if sub_category_name == "": 
                 return JsonResponse({"error": "Atleast one character is required.", "status_code": 400}, status=400)
-
             admin_data = PavamanAdminDetails.objects.filter(id=admin_id).first()
             if not admin_data:
                 return JsonResponse({"error": "Admin not found or session expired.", "status_code": 401}, status=401)
-
             subcategories = SubCategoryDetails.objects.filter(
                 admin_id=admin_id,
                 category_id=category_id,
                 sub_category_status=1,
                 sub_category_name__icontains=sub_category_name 
             )
-
             if not subcategories.exists():
                 return JsonResponse({"message": "No subcategory details found", "status_code": 200}, status=200)
             subcategory_list = []
@@ -1885,19 +1508,15 @@ def search_subcategories(request):
                     "sub_category_name": subcategory.sub_category_name,
                     "sub_category_image_url": image_url
                 })
-
             return JsonResponse(
                 {"message": "Subcategories retrieved successfully.", "subcategories": subcategory_list, "status_code": 200},
                 status=200
             )
-
         except json.JSONDecodeError:
             return JsonResponse({"error": "Invalid JSON data.", "status_code": 400}, status=400)
         except Exception as e:
             return JsonResponse({"error": f"An unexpected error occurred: {str(e)}", "status_code": 500}, status=500)
-
     return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
-
 @csrf_exempt
 def search_products(request):
     if request.method == 'POST':
@@ -1907,21 +1526,17 @@ def search_products(request):
             category_id = data.get('category_id')
             sub_category_id = data.get('sub_category_id')
             product_name = data.get('product_name', '').strip() 
-
             if not admin_id:
                 return JsonResponse({"error": "Admin ID are required.", "status_code": 400}, status=400)
             if not category_id:
                 return JsonResponse({"error": "Category ID are required.", "status_code": 400}, status=400)
             if not sub_category_id:
                 return JsonResponse({"error": "Sub Category ID are required.", "status_code": 400}, status=400)
-
             if product_name == "":
                 return JsonResponse({"error": "Atleast one character is required.", "status_code": 400}, status=400)
-
             admin_data = PavamanAdminDetails.objects.filter(id=admin_id).first()
             if not admin_data:
                 return JsonResponse({"error": "Admin not found or session expired.", "status_code": 401}, status=401)
-
             products = ProductsDetails.objects.filter(
                 admin_id=admin_id,
                 category_id=category_id,
@@ -1936,7 +1551,6 @@ def search_products(request):
             product_list = []
             for product in products:
                 product_images = product.product_images
-
                 if isinstance(product_images, list) and product_images:
                     product_image_key = product_images[0]
                 elif isinstance(product_images, str):
@@ -1956,109 +1570,24 @@ def search_products(request):
                     "product_images": product_image_url,
                     "sku_number": product.sku_number,
                 })
-
             return JsonResponse(
                 {"message": "Products retrieved successfully.", "products": product_list, "status_code": 200},
                 status=200
             )
-
         except json.JSONDecodeError:
             return JsonResponse({"error": "Invalid JSON data.", "status_code": 400}, status=400)
         except Exception as e:
             return JsonResponse({"error": f"An unexpected error occurred: {str(e)}", "status_code": 500}, status=500)
-
     return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
-
-
-@csrf_exempt
-def discount_products(request):
-    if request.method == 'POST':
-        try:
-            data = json.loads(request.body)
-            admin_id = data.get('admin_id')
-
-            if not admin_id:
-                return JsonResponse({"error": "Admin ID is required.", "status_code": 400}, status=400)
-
-            products = ProductsDetails.objects.filter(admin_id=admin_id, discount__gt=0)
-
-            if not products.exists():
-                return JsonResponse({
-                    "message": "No products with discount found.",
-                    "status_code": 200,
-                    "admin_id": str(admin_id)
-                }, status=200)
-            product_list = []
-            for product in products:
-                if isinstance(product.product_images, list):
-                    image_urls = [
-                        f"https://{settings.AWS_STORAGE_BUCKET_NAME}.s3.{settings.AWS_S3_REGION_NAME}.amazonaws.com/{img}"
-                        for img in product.product_images
-                    ]
-                elif isinstance(product.product_images, str):
-                    image_urls = [
-                        f"https://{settings.AWS_STORAGE_BUCKET_NAME}.s3.{settings.AWS_S3_REGION_NAME}.amazonaws.com/{product.product_images}"
-                    ]
-                else:
-                    image_urls = []
-                material_file_url = (
-                    f"https://{settings.AWS_STORAGE_BUCKET_NAME}.s3.{settings.AWS_S3_REGION_NAME}.amazonaws.com/{product.material_file}"
-                    if product.material_file else ""
-                )
-                price = float(product.price or 0)
-                discount = float(product.discount or 0)
-                gst = float(product.gst or 0)
-                final_price = price - (price * discount / 100)
-                product_list.append({
-                    "product_id": str(product.id),
-                    "product_name": product.product_name,
-                    "sku_number": product.sku_number,
-                    "price": round(price, 2),
-                    "gst": f"{round(gst, 2)}%",
-                    "final_price": round(final_price, 2),
-                    "discount": f"{round(discount)}%",
-                    "quantity": product.quantity,
-                    "material_file": material_file_url,
-                    "description": product.description,
-                    "number_of_specifications": product.number_of_specifications,
-                    "specifications": product.specifications,
-                    "product_images": image_urls,
-                    "created_at": product.created_at,
-                    "category": product.category.category_name if product.category else None,
-                    "sub_category": product.sub_category.sub_category_name if product.sub_category else None,
-                    "category_id": product.category_id,
-                    "sub_category_id": product.sub_category_id,
-                    "availability": product.availability,
-                    "product_status": product.product_status,
-                    "cart_status": product.cart_status,
-                })
-
-            return JsonResponse({
-                "message": "Discount products retrieved successfully.",
-                "products": product_list,
-                "status_code": 200,
-                "admin_id": str(admin_id)
-            }, status=200)
-
-        except json.JSONDecodeError:
-            return JsonResponse({"error": "Invalid JSON data.", "status_code": 400}, status=400)
-        except Exception as e:
-            return JsonResponse({"error": f"An unexpected error occurred: {str(e)}", "status_code": 500}, status=500)
-
-    return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
-
 @csrf_exempt
 def download_discount_products_excel(request):
     if request.method == 'POST':
         try:
             data = json.loads(request.body)
             admin_id = data.get('admin_id')
-
             if not admin_id:
                 return JsonResponse({"error": "Admin ID is required.", "status_code": 400}, status=400)
-
             products = ProductsDetails.objects.filter(admin_id=admin_id).order_by('created_at')
-
             if not products.exists():
                 return JsonResponse({
                     "message": "No products with discount found.",
@@ -2069,9 +1598,9 @@ def download_discount_products_excel(request):
             ws = wb.active
             ws.title = "Products Details"
             headers = [
-                "Product ID", "Product Name", "SKU Number", "Price", "Discount (%)", "GST (%)","Final Price",
+                "Product ID", "Product Name", "SKU","HSN", "Price", "Discount (%)", "GST (%)","Final Price",
                 "Quantity", "Material File", "Description", "Specifications Count", "Specifications",
-                "Availability", "Category", "Subcategory", "Category ID", "Subcategory ID", "Created At"
+                "Availability", "Category", "Subcategory", "Created At"
             ]
             ws.append(headers)
             for product in products:
@@ -2100,8 +1629,6 @@ def download_discount_products_excel(request):
                     product.availability,
                     product.category.category_name if product.category else '',
                     product.sub_category.sub_category_name if product.sub_category else '',
-                    product.category_id,
-                    product.sub_category_id,
                     product.created_at.strftime('%Y-%m-%d %H:%M:%S') if product.created_at else ''
                 ])
             buffer = BytesIO()
@@ -2113,14 +1640,11 @@ def download_discount_products_excel(request):
             )
             response['Content-Disposition'] = 'attachment; filename=Products_Details.xlsx'
             return response
-
         except json.JSONDecodeError:
             return JsonResponse({"error": "Invalid JSON data.", "status_code": 400}, status=400)
         except Exception as e:
             return JsonResponse({"error": f"An unexpected error occurred: {str(e)}", "status_code": 500}, status=500)
-
     return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
-
 @csrf_exempt
 def apply_discount_by_subcategory_only(request):
     if request.method == 'POST':
@@ -2128,43 +1652,33 @@ def apply_discount_by_subcategory_only(request):
             data = json.loads(request.body.decode('utf-8'))
             categories = data.get('categories')
             admin_id = data.get('admin_id')
-
             if not admin_id:
                 return JsonResponse({"error": "admin_id is required.", "status_code": 400}, status=400)
-
             try:
                 admin = PavamanAdminDetails.objects.get(id=admin_id, status=1)
             except PavamanAdminDetails.DoesNotExist:
                 return JsonResponse({"error": "Admin not found or not active.", "status_code": 403}, status=403)
-
             if not categories or not isinstance(categories, list):
                 return JsonResponse({"error": "categories must be a list.", "status_code": 400}, status=400)
-
             response_categories = []
-
             for cat_data in categories:
                 category_id = cat_data.get('category_id')
                 category_name = cat_data.get('category_name')
                 sub_category_id = cat_data.get('sub_category_id')
                 sub_category_name = cat_data.get('sub_category_name')
                 discount_str = cat_data.get('discount')
-
                 if not all([category_id, category_name, sub_category_id, sub_category_name, discount_str]):
                     return JsonResponse({
                         "error": "Each item must have category_id, category_name, sub_category_id, sub_category_name, and discount.",
                         "status_code": 400
                     }, status=400)
-
                 if not discount_str.endswith('%'):
                     return JsonResponse({"error": "Invalid discount format. Must end with '%'.", "status_code": 400}, status=400)
-
                 discount = float(discount_str.replace('%', ''))
-
                 try:
                     category = CategoryDetails.objects.get(id=category_id, category_name=category_name)
                 except CategoryDetails.DoesNotExist:
                     return JsonResponse({"error": f"Category '{category_name}' not found.", "status_code": 404}, status=404)
-
                 try:
                     subcategory = SubCategoryDetails.objects.get(
                         id=sub_category_id,
@@ -2176,15 +1690,12 @@ def apply_discount_by_subcategory_only(request):
                         "error": f"Subcategory '{sub_category_name}' not found in category '{category_name}'.",
                         "status_code": 404
                     }, status=404)
-
                 products = ProductsDetails.objects.filter(
                     category_id=category_id,
                     sub_category_id=sub_category_id,
                     product_status=1
                 )
-
                 updated_products = []
-
                 for product in products:
                     price = float(product.price or 0)
                     gst = float(product.gst or 0)
@@ -2200,7 +1711,6 @@ def apply_discount_by_subcategory_only(request):
                         "gst": f"{round(gst, 2)}%",
                         "final_price": round(final_price, 2)
                     })
-
                 response_categories.append({
                     "category_id": category_id,
                     "category_name": category_name,
@@ -2215,35 +1725,27 @@ def apply_discount_by_subcategory_only(request):
                 "admin_id": admin_id,
                 "status_code": 200
             }, status=200)
-
         except json.JSONDecodeError:
             return JsonResponse({"error": "Invalid JSON format.", "status_code": 400}, status=400)
         except Exception as e:
             return JsonResponse({"error": f"Server error: {str(e)}", "status_code": 500}, status=500)
-
     return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
-
 @csrf_exempt
 def order_or_delivery_status(request):
     if request.method != "POST":
         return JsonResponse({"error": "Only POST allowed", "status_code": 405}, status=405)
-
     try:
         data = json.loads(request.body.decode("utf-8"))
-
         admin_id = data.get("admin_id")
         customer_id =data.get("customer_id")
         product_order_id = data.get("product_order_id")
-        action = data.get("action")  # either "Shipped" or "Delivered"
+        action = data.get("action")
         single_order_product_id = data.get("single_order_product_id")
-
         if not all([admin_id, product_order_id,customer_id, action]):
             return JsonResponse({"error": "Missing required fields", "status_code": 400}, status=400)
-
         payment = PaymentDetails.objects.filter(admin_id=admin_id, product_order_id=product_order_id,customer_id=customer_id).first()
         if not payment:
             return JsonResponse({"error": "Payment not found", "status_code": 404}, status=404)
-
         updated_orders = []
         if action == "Shipped":
             if single_order_product_id:
@@ -2284,10 +1786,8 @@ def order_or_delivery_status(request):
                         order.delivery_status = "Delivered"
                         order.save()
                         updated_orders.append(order.id)
-
         else:
             return JsonResponse({"error": "Invalid action type", "status_code": 400}, status=400)
-
         return JsonResponse({
             "message": f"{action.capitalize()} status updated successfully.",
             "updated_orders": updated_orders,
@@ -2297,8 +1797,6 @@ def order_or_delivery_status(request):
 
     except Exception as e:
         return JsonResponse({"error": str(e), "status_code": 500}, status=500)
-   
-
 @csrf_exempt
 def retrieve_feedback(request):
     if request.method != "POST":
@@ -2306,22 +1804,18 @@ def retrieve_feedback(request):
             "error": "Invalid HTTP method. Only POST allowed.",
             "status_code": 405
         }, status=405)
-
     try:
         data = json.loads(request.body.decode("utf-8"))
         admin_id = data.get('admin_id')
         action = data.get('action')
-
         if not admin_id:
             return JsonResponse({"error": "admin_id is required.", "status_code": 400}, status=400)
         if not action:
             return JsonResponse({"error": "action is required.", "status_code": 400}, status=400)
-
         if action == "customer_rating":
             feedbacks = FeedbackRating.objects.filter(admin_id=admin_id)
             if not feedbacks.exists():
                 return JsonResponse({"error": "No feedback found for this admin.", "status_code": 404}, status=404)
-
             feedback_data = []
             for feedback in feedbacks:
                 try:
@@ -2332,7 +1826,6 @@ def retrieve_feedback(request):
                         first_image = product.product_images[0]
                         if first_image:
                             image_url = f"https://{settings.AWS_STORAGE_BUCKET_NAME}.s3.{settings.AWS_S3_REGION_NAME}.amazonaws.com/{first_image}"
-
                     feedback_data.append({
                         "customer_id": customer.id,
                         "customer_name": f"{customer.first_name} {customer.last_name}",
@@ -2347,18 +1840,15 @@ def retrieve_feedback(request):
                     })
                 except CustomerRegisterDetails.DoesNotExist:
                     continue
-
             return JsonResponse({
                 "feedback": feedback_data,
                 "status_code": 200,
                 "admin_id": str(admin_id)
             }, status=200)
-
         elif action == "avgrating":
             avg_ratings = FeedbackRating.objects.filter(admin_id=admin_id) \
                             .values('product_id') \
                             .annotate(average_rating=Avg('rating'))
-
             rating_data = []
             for item in avg_ratings:
                 try:
@@ -2368,7 +1858,6 @@ def retrieve_feedback(request):
                         first_image = product.product_images[0]
                         if first_image:
                             image_url = f"https://{settings.AWS_STORAGE_BUCKET_NAME}.s3.{settings.AWS_S3_REGION_NAME}.amazonaws.com/{first_image}"
-
                     rating_data.append({
                         "product_id": product.id,
                         "category_name":product.category.category_name,
@@ -2390,39 +1879,31 @@ def retrieve_feedback(request):
 
         else:
             return JsonResponse({"error": "Invalid action provided.", "status_code": 400}, status=400)
-
     except json.JSONDecodeError:
         return JsonResponse({
             "error": "Invalid JSON format.",
             "status_code": 400
         }, status=400)
-
     except Exception as e:
         return JsonResponse({
             "error": f"Server error: {str(e)}",
             "status_code": 500
         }, status=500)
-
 @csrf_exempt
 def report_inventory_summary(request):
     if request.method != "POST":
         return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
-
     try:
         data = json.loads(request.body.decode("utf-8"))
         admin_id = data.get('admin_id')
-
         if not admin_id:
             return JsonResponse({"error": "admin_id is required.", "status_code": 400}, status=400)
-
         total_products = ProductsDetails.objects.filter(admin_id=admin_id).count()
         total_customers = CustomerRegisterDetails.objects.filter(admin_id=admin_id).count()
-
         low_stock_products = ProductsDetails.objects.filter(
             admin_id=admin_id,
             quantity__lt=10
         ).values('product_name', 'sku_number', 'quantity')
-
         return JsonResponse({
             "total_products": total_products,
             "total_customers": total_customers,
@@ -2430,10 +1911,8 @@ def report_inventory_summary(request):
             "status_code": 200,
             "admin_id": admin_id
         }, status=200)
-    
     except Exception as e:
         return JsonResponse({"error": str(e), "status_code": 500}, status=500)
-
 @csrf_exempt
 def top_buyers_report(request):
     if request.method != "POST":
@@ -2441,18 +1920,13 @@ def top_buyers_report(request):
     try:
         data = json.loads(request.body.decode("utf-8"))
         admin_id = data.get('admin_id')
-
         if not admin_id:
             return JsonResponse({"error": "admin_id is required.", "status_code": 400}, status=400)
-
         payments = PaymentDetails.objects.filter(admin_id=admin_id)
-
         all_order_product_ids = []
         for p in payments:
             if isinstance(p.order_product_ids, list):
                 all_order_product_ids.extend(p.order_product_ids)
-
-     
         buyers_data = (
             OrderProducts.objects
             .filter(admin_id=admin_id, id__in=all_order_product_ids)
@@ -2463,7 +1937,6 @@ def top_buyers_report(request):
             )
             .order_by('-total_quantity')  
         )
-
         result = []
         for buyer in buyers_data:
             try:
@@ -2478,69 +1951,19 @@ def top_buyers_report(request):
                 })
             except CustomerRegisterDetails.DoesNotExist:
                 continue
-
         return JsonResponse({
             "buyers": result,
             "status_code": 200,
             "admin_id": admin_id
         }, status=200)
-
     except Exception as e:
         return JsonResponse({"error": str(e), "status_code": 500}, status=500)
-@csrf_exempt
-def customer_growth_by_state(request):
-    if request.method == "POST":
-        try:
-            data = json.loads(request.body.decode('utf-8'))
-            admin_id = data.get("admin_id")
-
-            if not admin_id:
-                return JsonResponse({
-                    "status_code": 400,
-                    "message": "admin_id is required."
-                })
-            customers = CustomerRegisterDetails.objects.filter(
-                admin_id=admin_id
-            ).exclude(mobile_no="")
-            matched_addresses = CustomerAddress.objects.filter(
-                customer__in=customers,
-                mobile_number=F('customer__mobile_no')
-            ).exclude(state="").values(
-                'state',
-                'district',
-                'pincode',
-                'mandal',
-                'village',
-                'postoffice'
-            ).annotate(
-                customer_count=Count('customer', distinct=True)
-            ).order_by('-customer_count')
-
-            return JsonResponse({
-                "status_code": 200,
-                "message": "Customer growth by state (mobile number match)",
-                "data": list(matched_addresses)
-            })
-
-        except Exception as e:
-            return JsonResponse({
-                "status_code": 500,
-                "message": "Error occurred.",
-                "error": str(e)
-            })
-    else:
-        return JsonResponse({
-            "status_code": 405,
-            "message": "Method Not Allowed. Use POST."
-        }, status=405)
-
 @csrf_exempt
 def monthly_product_orders(request):
     if request.method == "POST":
         try:
             data = json.loads(request.body.decode('utf-8'))
             admin_id = data.get("admin_id")
-
             if not admin_id:
                 return JsonResponse({
                     "status_code": 400,
@@ -2574,14 +1997,12 @@ def monthly_product_orders(request):
                 }
                 for item in monthly_data
             ]
-
             return JsonResponse({
                 "admin_id":admin_id,
                 "status_code": 200,
                 "message": "Monthly total products ordered (current month).",
                 "data": result
             })
-
         except Exception as e:
             return JsonResponse({
                 "status_code": 500,
@@ -2593,8 +2014,6 @@ def monthly_product_orders(request):
             "status_code": 405,
             "message": "Method Not Allowed. Use POST."
         }, status=405)
-
-
 @csrf_exempt
 def download_feedback_excel(request):
     if request.method == "POST":
@@ -2613,11 +2032,10 @@ def download_feedback_excel(request):
             ws.title = "Feedback Report"
             headers = [
                 "Customer Name", "Customer Email", "Product Name", 
-                "Product ID", "Rating", "Feedback", "Order ID", 
+                "SKU","HSN", "Rating", "Feedback", "Order ID", 
                 "Created At", "Product Image URL"
             ]
             ws.append(headers)
-
             for feedback in feedbacks:
                 try:
                     customer = CustomerRegisterDetails.objects.get(id=feedback.customer_id)
@@ -2628,12 +2046,12 @@ def download_feedback_excel(request):
                         first_image = product.product_images[0]
                         if first_image:
                             image_url = f"https://{settings.AWS_STORAGE_BUCKET_NAME}.s3.{settings.AWS_S3_REGION_NAME}.amazonaws.com/{first_image}"
-
                     ws.append([
                         f"{customer.first_name} {customer.last_name}",
                         customer.email,
                         product.product_name,
-                        product.id,
+                        product.sku_number,
+                        product.hsn_code,
                         feedback.rating,
                         feedback.feedback,
                         feedback.order_id,
@@ -2642,8 +2060,6 @@ def download_feedback_excel(request):
                     ])
                 except (CustomerRegisterDetails.DoesNotExist, ProductsDetails.DoesNotExist):
                     continue
-
-            
             response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
             response['Content-Disposition'] = 'attachment; filename=feedback_report.xlsx'
             buffer = io.BytesIO()
@@ -2651,15 +2067,11 @@ def download_feedback_excel(request):
             buffer.seek(0)
             response.write(buffer.read())
             return response
-
         except json.JSONDecodeError:
             return JsonResponse({"error": "Invalid JSON format", "status_code": 400}, status=400)
-
         except Exception as e:
             return JsonResponse({"error": f"Server error: {str(e)}", "status_code": 500}, status=500)
-
     return JsonResponse({"error": "Invalid HTTP method. Only POST allowed.", "status_code": 405}, status=405)
-
 @csrf_exempt
 def product_discount_inventory_view(request):
     if request.method == 'POST':
@@ -2667,20 +2079,17 @@ def product_discount_inventory_view(request):
             data = json.loads(request.body)
             admin_id = data.get('admin_id')
             action = data.get('action')
-
             if not admin_id:
                 return JsonResponse({"error": "Admin ID is required.", "status_code": 400}, status=400)
             if not action or action not in ['inventory', 'discount']:
                 return JsonResponse({"error": "Valid 'action' is required: 'inventory' or 'discount'.", "status_code": 400}, status=400)
             products = ProductsDetails.objects.filter(admin_id=admin_id, discount__gt=0)
-
             if not products.exists():
                 return JsonResponse({
                     "message": "No products with discount found.",
                     "status_code": 200,
                     "admin_id": str(admin_id)
                 }, status=200)
-
             product_list = []
             for product in products:
                 if isinstance(product.product_images, list):
@@ -2702,7 +2111,6 @@ def product_discount_inventory_view(request):
                 discount = float(product.discount or 0)
                 gst = float(product.gst or 0)
                 final_price = price - (price * discount / 100)
-
                 product_data = {
                     "product_id": str(product.id),
                     "product_name": product.product_name,
@@ -2732,35 +2140,27 @@ def product_discount_inventory_view(request):
                         order_status='Paid'
                     ).aggregate(total=Sum('quantity'))['total'] or 0
                     product_data["total_quantity_sold"] = total_sold
-
                 product_list.append(product_data)
-
             return JsonResponse({
                 "message": f"{action.capitalize()} products retrieved successfully.",
                 "products": product_list,
                 "status_code": 200,
                 "admin_id": str(admin_id)
             }, status=200)
-
         except json.JSONDecodeError:
             return JsonResponse({"error": "Invalid JSON data.", "status_code": 400}, status=400)
         except Exception as e:
             return JsonResponse({"error": f"An unexpected error occurred: {str(e)}", "status_code": 500}, status=500)
-
     return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
-
 @csrf_exempt
 def download_inventory_products_excel(request):
     if request.method == 'POST':
         try:
             data = json.loads(request.body)
             admin_id = data.get('admin_id')
-
             if not admin_id:
                 return JsonResponse({"error": "Admin ID is required.", "status_code": 400}, status=400)
-
             products = ProductsDetails.objects.filter(admin_id=admin_id)
-
             if not products.exists():
                 return JsonResponse({
                     "message": "No products found.",
@@ -2771,7 +2171,7 @@ def download_inventory_products_excel(request):
             ws = wb.active
             ws.title = "Products Inventory Details"
             headers = [
-                "Product ID", "Product Name", "SKU Number", "Price", "Discount (%)", "GST (%)", "Final Price",
+                "Product Name", "SKU","HSN" ,"Price", "Discount (%)", "GST (%)", "Final Price",
                 "Quantity", "Total Sold Quantity", "Specifications",
             ]
             ws.append(headers)
@@ -2785,9 +2185,9 @@ def download_inventory_products_excel(request):
                     order_status='Paid'
                 ).aggregate(total=Sum('quantity'))['total'] or 0
                 ws.append([
-                    str(product.id),
                     product.product_name,
                     product.sku_number,
+                    product.hsn_code,
                     round(price, 2),
                     f"{round(discount)}%",
                     f"{round(gst)}%",
@@ -2805,14 +2205,11 @@ def download_inventory_products_excel(request):
             )
             response['Content-Disposition'] = 'attachment; filename=Products_Inventory_Details.xlsx'
             return response
-
         except json.JSONDecodeError:
             return JsonResponse({"error": "Invalid JSON data.", "status_code": 400}, status=400)
         except Exception as e:
             return JsonResponse({"error": f"An unexpected error occurred: {str(e)}", "status_code": 500}, status=500)
-
     return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
-
 @csrf_exempt
 def download_average_rating_excel(request):
     if request.method == "POST":
@@ -2831,21 +2228,18 @@ def download_average_rating_excel(request):
 
             if not avg_ratings:
                 return JsonResponse({"error": "No ratings found for this admin", "status_code": 404}, status=404)
-
             wb = Workbook()
             ws = wb.active
             ws.title = "Average Ratings"
-            headers = ["Product ID", "Product Name","HSN Code","SKU Number", "Average Rating","Category Name","SubCategory Name"]
+            headers = ["Product Name","SKU","HSN", "Average Rating","Category Name","SubCategory Name"]
             ws.append(headers)
-
             for item in avg_ratings:
                 try:
                     product = ProductsDetails.objects.get(id=item['product_id'])
                     ws.append([
-                        product.id,
                         product.product_name,
-                        product.hsn_code,
                         product.sku_number,
+                        product.hsn_code,                     
                         round(item['average_rating'], 2),
                         product.category.category_name,
                         product.sub_category.sub_category_name,
@@ -2855,21 +2249,17 @@ def download_average_rating_excel(request):
             response = HttpResponse(
                 content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
             )
-            response['Content-Disposition'] = 'attachment; filename=average_ratings.xlsx'
+            response['Content-Disposition'] = 'attachment; filename=product_rating_report.xlsx'
             buffer = io.BytesIO()
             wb.save(buffer)
             buffer.seek(0)
             response.write(buffer.read())
             return response
-
         except json.JSONDecodeError:
             return JsonResponse({"error": "Invalid JSON format", "status_code": 400}, status=400)
-
         except Exception as e:
             return JsonResponse({"error": f"Server error: {str(e)}", "status_code": 500}, status=500)
-
     return JsonResponse({"error": "Invalid HTTP method. Only POST allowed.", "status_code": 405}, status=405)
-
 @csrf_exempt
 def product_discount_inventory_view(request):
     if request.method == 'POST':
@@ -2877,24 +2267,18 @@ def product_discount_inventory_view(request):
             data = json.loads(request.body)
             admin_id = data.get('admin_id')
             action = data.get('action')
-
             if not admin_id:
                 return JsonResponse({"error": "Admin ID is required.", "status_code": 400}, status=400)
             if not action or action not in ['inventory', 'discount']:
-                return JsonResponse({"error": "Valid 'action' is required: 'inventory' or 'discount'.", "status_code": 400}, status=400)
-
-            
+                return JsonResponse({"error": "Valid 'action' is required: 'inventory' or 'discount'.", "status_code": 400}, status=400)            
             products = ProductsDetails.objects.filter(admin_id=admin_id, discount__gt=0).order_by('created_at')
-
             if not products.exists():
                 return JsonResponse({
                     "message": "No products with discount found.",
                     "status_code": 200,
                     "admin_id": str(admin_id)
                 }, status=200)
-
             product_list = []
-
             for product in products:
                 if isinstance(product.product_images, list):
                     image_urls = [
@@ -2911,12 +2295,10 @@ def product_discount_inventory_view(request):
                     f"https://{settings.AWS_STORAGE_BUCKET_NAME}.s3.{settings.AWS_S3_REGION_NAME}.amazonaws.com/{product.material_file}"
                     if product.material_file else ""
                 )
-
                 price = float(product.price or 0)
                 discount = float(product.discount or 0)
                 gst = float(product.gst or 0)
                 final_price = price - (price * discount / 100)
-
                 product_data = {
                     "product_id": str(product.id),
                     "product_name": product.product_name,
@@ -2941,28 +2323,21 @@ def product_discount_inventory_view(request):
                     "product_status": product.product_status,
                     "cart_status": product.cart_status,
                 }
-
                 if action == 'inventory':
                     total_sold_quantity = OrderProducts.objects.filter(
                         product_id=product.id,
                         order_status='Paid'
                     ).aggregate(total=Sum('quantity'))['total'] or 0
                     product_data["total_quantity_sold"] = total_sold_quantity
-
                 product_list.append(product_data)
-
             return JsonResponse({
                 "message": f"{action.capitalize()} products retrieved successfully.",
                 "products": product_list,
                 "status_code": 200,
                 "admin_id": str(admin_id)
             }, status=200)
-
         except json.JSONDecodeError:
             return JsonResponse({"error": "Invalid JSON data.", "status_code": 400}, status=400)
         except Exception as e:
             return JsonResponse({"error": f"An unexpected error occurred: {str(e)}", "status_code": 500}, status=500)
-
     return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
-
-
