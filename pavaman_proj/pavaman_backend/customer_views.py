@@ -1512,15 +1512,13 @@ def order_product_details(request):
                 created_at=current_time,
                 admin=admin
             )
-
-            # product.quantity -= quantity
-            # product.save()
-
+            image_path = product.product_images[0] if isinstance(product.product_images, list) and product.product_images else None
+            image_url = f"{settings.AWS_S3_BUCKET_URL}/{image_path}" if image_path else ""
             return JsonResponse({
                 "message": "Order Created successfully!",
                 "order_id": order.id,
                 "product_name":product.product_name,
-                "product_images": product.product_images[0] if product.product_images else None,
+                "product_images":image_url ,
                 "number_of_quantities": quantity,
                 "product_price": price,
                 "total_price": final_price,
