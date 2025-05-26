@@ -19,11 +19,14 @@ load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+
 SECRET_KEY = os.getenv('SECRET_KEY')
 
 DEBUG = os.getenv('DEBUG') == 'True'
 
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '127.0.0.1,localhost').split(',')
+ALLOWED_HOSTS = ['*']  # Allow all hosts
+
+
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -34,6 +37,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'pavaman_backend',
     'corsheaders',
+    # 'social_django',
 ]
 
 MIDDLEWARE = [
@@ -41,7 +45,7 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
+    # 'django.middleware.csrf.CsrfViewMiddleware',  # Comment out CSRF middleware for development
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
@@ -104,36 +108,51 @@ USE_I18N = True
 
 USE_TZ = True
 
+
+
+
 import os 
 STATIC_URL = 'static/'
 STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
+
+
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-CORS_ALLOW_ALL_ORIGINS = True
-# CORS_ALLOW_ALL_ORIGINS = False
-# Increase file upload limit (default is 2.5MB)
-DATA_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024  # 50MB
-FILE_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024  # 50MB
+CORS_ALLOW_ALL_ORIGINS = True  # Allow all origins
+# CORS_ALLOWED_ORIGINS = [  # Comment out or remove specific origins
+#     "http://localhost:3000",
+#     "http://3.110.62.38:3000",
+#     "http://3.110.62.38:8001",
+# ]
 
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:3000",  # Your frontend URL
-    # "https://yourfrontend.com",  # Production URL if hosted
-    "http://127.0.0.1:3000",
-
-]
-
-CSRF_TRUSTED_ORIGINS = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
+# Comment out CSRF_TRUSTED_ORIGINS since we're not using CSRF in development
+# CSRF_TRUSTED_ORIGINS = [
+#     "http://localhost:3000",
+#     "http://3.110.62.38:3000",
+#     "http://3.110.62.38:8001",
+# ]
 
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOW_METHODS = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+CORS_ALLOW_METHODS = [
+    "GET",
+    "POST",
+    "PUT",
+    "PATCH",
+    "DELETE",
+    "OPTIONS"
+]
 CORS_ALLOW_HEADERS = [
-    'content-type',
-    'authorization',
-    'x-requested-with',
-] 
+    "accept",
+    "accept-encoding",
+    "authorization",
+    "content-type",
+    "dnt",
+    "origin",
+    "user-agent",
+    "x-csrftoken",
+    "x-requested-with",
+]
+
 # Google OAuth Credentials
 
 GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID')
@@ -184,6 +203,7 @@ RAZORPAY_KEY_ID = config("RAZORPAY_KEY_ID")
 RAZORPAY_KEY_SECRET = config("RAZORPAY_KEY_SECRET")
 
 SECURE_CROSS_ORIGIN_OPENER_POLICY = None
+
 
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
