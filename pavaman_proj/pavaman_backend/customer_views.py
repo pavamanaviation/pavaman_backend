@@ -102,6 +102,7 @@ def customer_register(request):
             customer.save()
             customer.register_status = 1
             customer.save(update_fields=['register_status'])
+            # first_name = data.get('first_name')
             send_verification_email(email,first_name,verification_link)
 
             return JsonResponse(
@@ -161,10 +162,7 @@ def send_verification_email(email, first_name, verification_link):
 
     text_content = f"""
     Hello {first_name},
-
-    Please verify your email using this link: {full_link}
     """
-
     html_content = f"""
     <html>
     <head>
@@ -173,37 +171,42 @@ def send_verification_email(email, first_name, verification_link):
             @media only screen and (max-width: 600px) {{
                 .container {{
                     width: 90% !important;
-                        padding: 20px !important;
-                    }}
-                .logo {{
-                        max-width: 180px !important;
-                        height: auto !important;
+                    padding: 20px !important;
                 }}
-
+                .logo {{
+                    max-width: 180px !important;
+                    height: auto !important;
+                }}
             }}
         </style>
     </head>
     <body style="margin: 0; padding: 0; font-family: 'Inter', sans-serif; background-color: #f5f5f5;">
-        <div class="container" style="margin: 40px auto; background-color: #ffffff; border-radius: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); padding: 40px 30px; text-align: center; max-width: 480px;">
-           <img src="{logo_url}" alt="Pavaman Logo" class="logo" style="max-width: 280px; height: auto; margin-bottom: 20px;" />
-            
-            <h2 style="margin-top: 0; color: #222;">Please verify your email</h2>            
-            <p style="color: #555; margin: 20px 0 30px;">
-                To use Pavaman, click the verification button. This helps keep your account secure.
+        <div class="container" style="margin: 40px auto; background-color: #ffffff; border-radius: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); padding: 40px 30px; max-width: 480px; text-align: left;">
+                <div style="text-align: center;">
+                <img src="{logo_url}" alt="Pavaman Logo" class="logo" style="max-width: 280px; height: auto; margin-bottom: 20px;" />
+                <h2 style="margin-top: 0; color: #222;">Please verify your email</h2>
+            </div>
+            <div style="margin-bottom: 10px; color: #555; font-size: 14px;">
+                Hello {first_name},
+            </div>
+            <p style="color: #555; margin: 20px 0 30px; font-size:14px">
+                To use <strong>Pavaman</strong>, click the verification button. This helps keep your account secure.
             </p>
-
-            <a href="{full_link}" style="display: inline-block; padding: 14px 28px; background-color: #4450A2; color: #ffffff; font-weight: 600; border-radius: 8px; text-decoration: none; font-size: 16px;">
-                Verify my account
-            </a>
-
-            <p style="color: #888; font-size: 14px; margin-top: 40px;">
-                You're receiving this email because you have an account with Pavaman.<br/>
-                If you're not sure why, then ignor this email.
+            <div style="text-align: center;">
+                <a href="{full_link}" style="display: inline-block; padding: 14px 28px; background-color: #4450A2; color: #ffffff; font-weight: 600; border-radius: 8px; text-decoration: none; font-size: 16px;">
+                    Verify my account
+                </a>
+            </div>
+            <p style="color: #888; font-size: 14px; margin-top: 20px;">
+                If you didn't request this, you can safely ignore this email.<br/>
+                You're receiving this because you have an account on Pavaman.
             </p>
+            <p style="margin-top: 30px; font-size: 14px; color: #888;">This is an automated email. Please do not reply.</p>
         </div>
     </body>
     </html>
     """
+
     email_message = EmailMultiAlternatives(
         subject, text_content, settings.DEFAULT_FROM_EMAIL, [email]
     )
@@ -316,6 +319,7 @@ def google_login(request):
                 register_type="Google",
                 admin=admin,
             )
+            
             send_verification_email(email,first_name,verification_link)
 
             return JsonResponse({
@@ -446,25 +450,26 @@ def otp_generate(request):
                 send_password_reset_otp_email(customer)
                 return JsonResponse({
                     "message": "OTP sent to email",
+                    "reset_token":customer.reset_link
                     })
             else:
-                send_bulk_sms([identifier], f"Your OTP for password reset is: {otp}. Do not share this with anyone.")
+                send_bulk_sms([identifier], f"Hello! This is your OTP for password reset on Pavaman Aviation: {otp}. It is valid for 2 minutes. Do not share it with anyone.")
                 return JsonResponse({
                     "message": "OTP sent to mobile number",
+                    "reset_token":customer.reset_link
                     })
 
         except json.JSONDecodeError:
             return JsonResponse({"error": "Invalid JSON data"}, status=400)
 
     return JsonResponse({"error": "Invalid request method"}, status=405)
-
 def send_password_reset_otp_email(customer):
     otp = customer.otp
     email = customer.email
     first_name = customer.first_name or 'Customer'
     reset_token = customer.reset_link
     logo_url = f"{settings.AWS_S3_BUCKET_URL}/static/images/aviation-logo.png"
-    subject = "[Pavaman] Your OTP for Password Reset 🔐"
+    subject = "[Pavaman] Your OTP for Password Reset"
     text_content = f"Hello {first_name},\n\nYour OTP for password reset is: {otp}"
     html_content = f"""
     <html>
@@ -488,13 +493,21 @@ def send_password_reset_otp_email(customer):
         </style>
     </head>
     <body style="margin: 0; padding: 0; font-family: 'Inter', sans-serif; background-color: #f5f5f5;">
-        <div class="container" style="margin: 40px auto; background-color: #ffffff; border-radius: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); padding: 40px 30px; text-align: center; max-width: 480px;">
-            <img src="{logo_url}" alt="Pavaman Logo" class="logo" style="max-width: 280px; height: auto; margin-bottom: 20px;" />            <h2 style="margin-top: 0; color: #222;">Your OTP for Password Reset</h2>
-            <p style="color: #555; margin-bottom: 30px;">
-                Hello <strong>{first_name}</strong>, use the OTP below to reset your password. This OTP is valid for 2 minutes.
+        <div class="container" style="margin: 40px auto; background-color: #ffffff; border-radius: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); padding: 40px 30px; max-width: 480px; text-align: left;">
+            <div style="text-align: center;">
+            <img src="{logo_url}" alt="Pavaman Logo" class="logo" style="max-width: 280px; height: auto; margin-bottom: 20px;" />
+            <h2 style="margin-top: 0; color: #222;">Your OTP for Password Reset</h2>
+            </div>
+
+            <p style="color: #555; margin-bottom: 30px; text-align: left;">
+            Hello <strong>{first_name}</strong>,
             </p>
 
-            <p class="otp" style="font-size: 28px; font-weight: bold; color: #4450A2; background: #f2f2f2; display: inline-block; padding: 12px 24px; border-radius: 10px; letter-spacing: 4px;">
+            <p style="color: #555; margin-bottom: 30px;">
+                Use the OTP below to reset your password. This OTP is valid for 2 minutes.
+            </p>
+          
+            <p class="otp" style="font-size: 28px; font-weight: bold; color: #4450A2; background: #f2f2f2; display: block; padding: 12px 24px; border-radius: 10px; letter-spacing: 4px; width: fit-content; margin: 0 auto;">
                 {otp}
             </p>
 
@@ -502,6 +515,7 @@ def send_password_reset_otp_email(customer):
                 If you didn't request this, you can safely ignore this email.<br/>
                 You're receiving this because you have an account on Pavaman.
             </p>
+            <p style="margin-top: 30px; font-size: 14px; color: #888;">This is an automated email. Please do not reply.</p>
         </div>
     </body>
     </html>
@@ -519,7 +533,7 @@ def verify_otp(request):
     if request.method == "POST":
         try:
             data = json.loads(request.body)
-            identifier = data.get("identifier")  # Email or Mobile
+            identifier = data.get("identifier")
             otp = data.get("otp")
             reset_link = data.get("reset_link")
 
@@ -1093,6 +1107,23 @@ def view_product_cart(request):
             return JsonResponse({"error": f"An unexpected error occurred: {str(e)}", "status_code": 500}, status=500)
     return JsonResponse({"error": "Invalid HTTP method. Only GET is allowed.", "status_code": 405}, status=405)
 @csrf_exempt
+def update_cart_quantity(request):
+    if request.method == "POST":
+        data = json.loads(request.body)
+        customer_id = data.get("customer_id")
+        product_id = data.get("product_id")
+        quantity = data.get("quantity")
+
+        try:
+            cart_item = CartProducts.objects.get(customer_id=customer_id, product_id=product_id)
+            cart_item.quantity = quantity
+            cart_item.save()
+            return JsonResponse({"status_code": 200, "message": "Quantity updated successfully"})
+        except CartProducts.DoesNotExist:
+            return JsonResponse({"status_code": 404, "error": "Cart item not found"})
+    return JsonResponse({"status_code": 405, "error": "Invalid request method"})
+
+@csrf_exempt
 def delete_product_cart(request):
     if request.method == 'POST':
         try:
@@ -1176,8 +1207,6 @@ def add_customer_address(request):
     if request.method == 'POST':
         try:
             data = json.loads(request.body.decode('utf-8'))
-
-            # Extract required fields
             customer_id = data.get("customer_id")
             first_name = data.get("first_name")
             last_name = data.get("last_name")
@@ -1462,138 +1491,6 @@ def delete_customer_address(request):
             return JsonResponse({"error": f"An unexpected error occurred: {str(e)}", "status_code": 500}, status=500)
 
     return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
-
-@csrf_exempt
-def order_product_details(request):
-    if request.method == 'POST':
-        try:
-            data = json.loads(request.body.decode('utf-8'))
-            product_id = data.get('product_id')
-            customer_id = data.get('customer_id')
-            quantity = max(int(data.get('quantity', 1)), 1)
-
-            if not customer_id or not product_id:
-                return JsonResponse({"error": "customer_id and product_id are required.", "status_code": 400}, status=400)
-
-            try:
-                customer = CustomerRegisterDetails.objects.get(id=customer_id)
-                product = ProductsDetails.objects.get(id=product_id)
-                admin = PavamanAdminDetails.objects.order_by('id').first()
-
-            except CustomerRegisterDetails.DoesNotExist:
-                return JsonResponse({"error": "Customer not found.", "status_code": 404}, status=404)
-            except ProductsDetails.DoesNotExist:
-                return JsonResponse({"error": "Product not found.", "status_code": 404}, status=404)
-            except PavamanAdminDetails.DoesNotExist:
-                return JsonResponse({"error": "Admin not found.", "status_code": 404}, status=404)
-
-            if not product.category or not product.sub_category:
-                return JsonResponse({"error": "Product's category or subcategory is not set.", "status_code": 400}, status=400)
-
-            if "stock" not in product.availability.lower() and "few" not in product.availability.lower():
-                return JsonResponse({"error": "Product is out of stock.", "status_code": 400}, status=400)
-
-            if product.quantity < quantity:
-                return JsonResponse({"error": "Requested quantity is unavailable.", "status_code": 400}, status=400)
-
-            price = product.price
-            final_price = price * quantity
-
-            current_time = datetime.utcnow() + timedelta(hours=5, minutes=30)
-            order = OrderProducts.objects.create(
-                customer=customer,
-                product=product,
-                category=product.category,
-                sub_category=product.sub_category,
-                quantity=quantity,
-                price=price,
-                final_price=final_price,
-                order_status="Pending",
-                created_at=current_time,
-                admin=admin
-            )
-            image_path = product.product_images[0] if isinstance(product.product_images, list) and product.product_images else None
-            image_url = f"{settings.AWS_S3_BUCKET_URL}/{image_path}" if image_path else ""
-            return JsonResponse({
-                "message": "Order Created successfully!",
-                "order_id": order.id,
-                "product_name":product.product_name,
-                "product_images":image_url ,
-                "number_of_quantities": quantity,
-                "product_price": price,
-                "total_price": final_price,
-                "status_code": 201
-            }, status=201)
-
-        except Exception as e:
-            return JsonResponse({"error": str(e), "status_code": 500}, status=500)
-
-    return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
-
-@csrf_exempt
-def order_summary(request):
-    if request.method == 'POST':
-        try:
-            data = json.loads(request.body.decode('utf-8'))
-            order_id = data.get('order_id')
-            product_id = data.get('product_id')
-            customer_id = data.get('customer_id')
-            address_id = data.get('address_id')
-
-            if not all([order_id, product_id, customer_id, address_id]):
-                return JsonResponse({"error": "All fields are required.", "status_code": 400}, status=400)
-
-            try:
-                order = OrderProducts.objects.get(id=order_id, product_id=product_id, customer_id=customer_id)
-                product = ProductsDetails.objects.get(id=product_id)
-                customer = CustomerRegisterDetails.objects.get(id=customer_id)
-                address = CustomerAddress.objects.get(id=address_id, customer_id=customer_id)
-            except OrderProducts.DoesNotExist:
-                return JsonResponse({"error": "Order not found.", "status_code": 404}, status=404)
-            except ProductsDetails.DoesNotExist:
-                return JsonResponse({"error": "Product not found.", "status_code": 404}, status=404)
-            except CustomerRegisterDetails.DoesNotExist:
-                return JsonResponse({"error": "Customer not found.", "status_code": 404}, status=404)
-            except CustomerAddress.DoesNotExist:
-                return JsonResponse({"error": "Address not found.", "status_code": 404}, status=404)
-            
-            image_path = product.product_images[0] if isinstance(product.product_images, list) and product.product_images else None
-            image_url = f"{settings.AWS_S3_BUCKET_URL}/{image_path}" if image_path else ""
-
-
-            return JsonResponse({
-                "message": "Order summary fetched successfully!",
-                "order_id": order.id,
-                "customer_name": f"{address.first_name} {address.last_name}",
-                "customer_email": address.email,
-                "customer_mobile": address.mobile_number,
-                "alternate_customer_mobile": address.mobile_number,
-                "product_name": product.product_name,
-                "product_price": order.price,
-                "quantity": order.quantity,
-                "total_price": order.final_price,
-                "order_status": order.order_status,
-                "order_date": order.created_at.strftime("%Y-%m-%d %H:%M:%S"),
-                "product_images": image_url,
-                "shipping_address": {
-                    "address_type": address.address_type,
-                    "street": address.street,
-                    "landmark": address.landmark,
-                    "village": address.village,
-                    "mandal": address.mandal,
-                    "postoffice": address.postoffice,
-                    "district": address.district,
-                    "state": address.state,
-                    "pincode": address.pincode
-                },
-                "status_code": 200
-            }, status=200)
-
-        except Exception as e:
-            return JsonResponse({"error": str(e), "status_code": 500}, status=500)
-
-    return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
-
 @csrf_exempt
 def order_multiple_products(request):
     if request.method == 'POST':
@@ -1643,9 +1540,6 @@ def order_multiple_products(request):
                 discounted_amount = (price * discount) / 100
                 final_price = price - discounted_amount
                 total_price = round(final_price * quantity, 2)
-                
-                print(final_price)
-
                 current_time = datetime.utcnow() + timedelta(hours=5, minutes=30)
                 order = OrderProducts.objects.create(
                     customer=customer,
@@ -1654,7 +1548,7 @@ def order_multiple_products(request):
                     sub_category=product.sub_category,
                     quantity=quantity,
                     price=price,
-                    final_price=final_price,
+                    final_price=total_price,
                     order_status="Pending",
                     created_at=current_time,
                     admin=admin
@@ -1735,8 +1629,8 @@ def multiple_order_summary(request):
 
                     price = float(product.price)
                     discount = float(product.discount or 0)
-                    discounted_amount = (price * discount) / 100
-                    final_price = price - discounted_amount
+                    discounted_amount = float((price * discount) / 100)
+                    final_price =round((price - discounted_amount),2)
                     image_path = product.product_images[0] if isinstance(product.product_images, list) and product.product_images else None
                     image_url = f"{settings.AWS_S3_BUCKET_URL}/{image_path}" if image_path else ""
                     
@@ -2118,9 +2012,8 @@ def razorpay_callback(request):
                     mobile_no = first_order.customer.mobile_no
                     print(mobile_no)
                     sms_message = (
-                        f"Dear {first_order.customer.first_name} {first_order.customer.last_name},\n"
-                        f"Your order (ID: {product_order_id}) has been confirmed and payment was successful."
-                        f"Total Amount: ₹{grand_total}.\nThank you for shopping with us!"
+                        f"Hi {first_order.customer.first_name}, your order (ID: {product_order_id}) is confirmed. "
+                        f"Payment of ₹{grand_total} received. Thanks for shopping with Pavaman!"
                     )
                     try:
                         send_bulk_sms([mobile_no], sms_message)
@@ -2152,12 +2045,10 @@ def razorpay_callback(request):
         except razorpay.errors.SignatureVerificationError:
             OrderProducts.objects.filter(id__in=[order.id for order in order_list]).update(order_status="Failed")
             return JsonResponse({"error": "Signature verification failed.", "razorpay_order_id": razorpay_order_id, "status_code": 400}, status=400)
-
     except Exception as e:
         return JsonResponse({"error": str(e), "status_code": 500}, status=500)
-
 def send_html_order_confirmation(to_email, customer_name, product_list, total_amount, order_id, transaction_id):
-    subject = "[Pavaman] Order Confirmation - Payment Successful"
+    subject = "[Pavaman] Order Confirmation - Payment Received"
     logo_url = f"{settings.AWS_S3_BUCKET_URL}/static/images/aviation-logo.png"
 
     product_html = ""
@@ -2169,40 +2060,46 @@ def send_html_order_confirmation(to_email, customer_name, product_list, total_am
             image_url = image_path
 
         product_html += f"""
-        <tr>
+        <tr style="border-bottom: 1px solid #eee;">
             <td style="padding: 10px;">
                 <img src="{image_url}" width="80" height="80" style="border-radius: 5px;" />
             </td>
-            <td style="padding: 10px;">
+            <td style="padding: 10px; vertical-align: top;">
                 <strong>{product['name']}</strong><br>
-                Qty: {product['quantity']}<br>
+                Quantity: {product['quantity']}<br>
                 Price: ₹{product['price']}
             </td>
         </tr>
         """
 
     html_content = f"""
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; border: 1px solid #ddd; padding: 20px; border-radius: 10px; position: relative;">
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; border: 1px solid #ddd; padding: 20px; border-radius: 10px; background-color: #ffffff;">
         <!-- Logo in top-right -->
         <div style="text-align: right;">
-            <img src="{logo_url}" alt="Pavaman Logo" style="max-height: 60px; margin-bottom: 10px;" />
+            <img src="{logo_url}" alt="Pavaman Logo" style="max-height: 60px;" />
         </div>
 
-        <h2 style="color: #2E7D32; margin-top: 0;">Payment Successful!</h2>
-        <p>Hi {customer_name},</p>
-        <p>Thank you for your order. Your payment was successful.</p>
+        <h2 style="color: #2E7D32;">Thank You for Your Purchase!</h2>
+        <p style="font-size: 15px;">Hi {customer_name},</p>
+        <p style="font-size: 15px;">We’re excited to let you know that your payment has been successfully processed. Your order is now being prepared and will be shipped soon.</p>
 
-        <p><strong>Order ID:</strong> {order_id}<br>
-        <strong>Transaction ID:</strong> {transaction_id}<br>
-        <strong>Total Amount Paid:</strong> ₹{total_amount}</p>
+        <table style="margin: 20px 0;">
+            <tr><td><strong>Order ID:</strong></td><td>{order_id}</td></tr>
+            <tr><td><strong>Total Paid:</strong></td><td>₹{total_amount}</td></tr>
+        </table>
 
-        <h3 style="border-bottom: 1px solid #ddd; padding-bottom: 5px;">Your Products</h3>
+        <h3 style="border-bottom: 1px solid #ddd; padding-bottom: 5px;">Order Summary</h3>
         <table style="width: 100%; border-collapse: collapse;">
             {product_html}
         </table>
 
-        <p style="margin-top: 20px;">We’ll send you another update when your products are out for delivery.</p>
-        <p>Regards,<br>Pavaman Team</p>
+        <p style="margin-top: 20px; font-size: 15px;">
+            You’ll receive another update once your order has been shipped. If you have any questions or need assistance, feel free to contact our support team.
+        </p>
+
+        <p style="font-size: 15px;">Thank you for choosing <strong>Pavaman</strong>.<br>We hope you enjoy your purchase!</p>
+
+        <p style="margin-top: 30px; font-size: 14px; color: #888;">This is an automated email. Please do not reply.</p>
     </div>
     """
     try:
@@ -2593,7 +2490,7 @@ def get_customer_details_by_admin(request):
             if not admin_id:
                 return JsonResponse({"error": "admin_id is required.", "status_code": 400}, status=400)
 
-            customers = CustomerRegisterDetails.objects.filter(admin_id=admin_id).values(
+            customers = CustomerRegisterDetails.objects.filter(admin_id=admin_id).order_by("-created_on").values(
                 "id", "first_name", "last_name", "email", "mobile_no", "account_status","created_on","register_type","register_status"
             )
 
@@ -3807,8 +3704,8 @@ def edit_profile_mobile_otp_handler(request):
                 otp = random.randint(100000, 999999)
                 customer.otp = otp
                 customer.save(update_fields=["otp"])
+                message = f"Hello, your OTP to verify your current mobile number for Pavaman Aviation is: {otp}. Please do not share this OTP with anyone."
 
-                message = f"Your OTP for verifying your current mobile number is: {otp}"
                 send_bulk_sms([customer.mobile_no], message)
 
                 return JsonResponse({
@@ -3842,8 +3739,8 @@ def edit_profile_mobile_otp_handler(request):
                 customer.otp = otp
                 customer.mobile_no = new_mobile
                 customer.save(update_fields=["otp", "mobile_no"])
+                message = f"Hello, your OTP to verify your new mobile number for Pavaman Aviation is: {otp}. Please do not share this OTP with anyone."
 
-                message = f"Your OTP for verifying your new mobile number is: {otp}"
                 send_bulk_sms([new_mobile], message)
 
                 return JsonResponse({
@@ -3972,16 +3869,14 @@ def edit_profile_email_otp_handler(request):
 
     return JsonResponse({"error": "Invalid request method."}, status=405)
 
-
 def send_email_verification_otp_email(customer):
     otp = customer.otp
     email = customer.email
-    first_name = customer.first_name or "Customer"
+    first_name = customer.first_name or 'Customer'
     logo_url = f"{settings.AWS_S3_BUCKET_URL}/static/images/aviation-logo.png"
-
     subject = "[Pavaman] OTP to Verify Your Email"
-    text_content = f"Hello {first_name},\n\nYour OTP for verifying your current email is: {otp}"
-
+    text_content = f"Hello {first_name},\n\nYour OTP for verifying your email is: {otp}"
+    
     html_content = f"""
     <html>
     <head>
@@ -4004,20 +3899,29 @@ def send_email_verification_otp_email(customer):
         </style>
     </head>
     <body style="margin: 0; padding: 0; font-family: 'Inter', sans-serif; background-color: #f5f5f5;">
-        <div class="container" style="margin: 40px auto; background-color: #ffffff; border-radius: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); padding: 40px 30px; text-align: center; max-width: 480px;">
+        <div class="container" style="margin: 40px auto; background-color: #ffffff; border-radius: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); padding: 40px 30px; max-width: 480px; text-align: left;">
+            <div style="text-align: center;">
             <img src="{logo_url}" alt="Pavaman Logo" class="logo" style="max-width: 280px; height: auto; margin-bottom: 20px;" />
             <h2 style="margin-top: 0; color: #222;">Verify Your Email</h2>
-            <p style="color: #555; margin-bottom: 30px;">
-                Hello <strong>{first_name}</strong>,<br>
-                Use this OTP to reset your Pavaman account email.
+            </div>
+
+            <p style="color: #555; margin-bottom: 30px; text-align: left;">
+            Hello <strong>{first_name}</strong>,
             </p>
-            <p class="otp" style="font-size: 28px; font-weight: bold; color: #4450A2; background: #f2f2f2; display: inline-block; padding: 12px 24px; border-radius: 10px; letter-spacing: 4px;">
+
+            <p style="color: #555; margin-bottom: 30px;">
+                Use the OTP below to verify your email. This OTP is valid for 2 minutes.
+            </p>
+          
+            <p class="otp" style="font-size: 28px; font-weight: bold; color: #4450A2; background: #f2f2f2; display: block; padding: 12px 24px; border-radius: 10px; letter-spacing: 4px; width: fit-content; margin: 0 auto;">
                 {otp}
             </p>
+
             <p style="color: #888; font-size: 14px; margin-top: 20px;">
-                If you didn't request a email reset, please ignore this email.<br/>
+                If you didn't request this, you can safely ignore this email.<br/>
                 You're receiving this because you have an account on Pavaman.
             </p>
+            <p style="margin-top: 30px; font-size: 14px; color: #888;">This is an automated email. Please do not reply.</p>
         </div>
     </body>
     </html>
