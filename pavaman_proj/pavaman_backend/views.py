@@ -1089,14 +1089,14 @@ def view_products(request):
                     "product_name": product['product_name'],
                     "sku_number": product['sku_number'],
                     "hsn_code": product['hsn_code'],          
-                    "price": f"{price:.2f}",
+                    "price": price,
                     "availability": product['availability'],
                     "quantity": product['quantity'],
                     "cart_status":product['cart_status'],
                     "product_images": image_url,
-                    "gst": f"{int(gst)}%",
+                    "gst": int(gst),
                     "final_price": f"{final_price:.2f}",
-                    "product_discount": f"{int(discount)}%",
+                    "product_discount": int(discount),
                     "product_description":product['description']
                 })
             return JsonResponse({
@@ -1566,6 +1566,11 @@ def search_products(request):
                     f"https://{settings.AWS_STORAGE_BUCKET_NAME}.s3.{settings.AWS_S3_REGION_NAME}.amazonaws.com/{product_image_key}"
                     if product_image_key else ""
                 )
+                price = round(float(product.price), 2)
+                discount = round(float(product.discount or 0), 2)
+                gst = round(float(product.gst or 0), 2)
+                discount_amount = round(price * (discount / 100), 2)
+                final_price = round(price - discount_amount, 2)
                 product_list.append({
                     "product_id": str(product.id),
                     "product_name": product.product_name,
@@ -1573,6 +1578,11 @@ def search_products(request):
                     "sub_category_id": str(product.sub_category_id),
                     "product_images": product_image_url,
                     "sku_number": product.sku_number,
+                    "hsn":product.hsn_code,
+                    "price":product.price,
+                    "gst": f"{int(gst)}%",
+                    "final_price": f"{final_price:.2f}",
+                    "product_discount": f"{int(discount)}%"
                 })
             return JsonResponse(
                 {"message": "Products retrieved successfully.", "products": product_list, "status_code": 200},
@@ -1676,9 +1686,12 @@ def apply_discount_by_subcategory_only(request):
                         "error": "Each item must have category_id, category_name, sub_category_id, sub_category_name, and discount.",
                         "status_code": 400
                     }, status=400)
-                if not discount_str.endswith('%'):
-                    return JsonResponse({"error": "Invalid discount format. Must end with '%'.", "status_code": 400}, status=400)
-                discount = float(discount_str.replace('%', ''))
+                try:
+                    discount = float(discount_str)
+                    if discount <= 0 or discount > 100:
+                        return JsonResponse({"error": "Discount must be between 1 and 100.Do not use "%".", "status_code": 400}, status=400)
+                except ValueError:
+                    return JsonResponse({"error": "Discount must be a number.", "status_code": 400}, status=400)
                 try:
                     category = CategoryDetails.objects.get(id=category_id, category_name=category_name)
                 except CategoryDetails.DoesNotExist:

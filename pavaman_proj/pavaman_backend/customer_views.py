@@ -2094,7 +2094,7 @@ def send_html_order_confirmation(to_email, customer_name, product_list, total_am
         </table>
 
         <p style="margin-top: 20px; font-size: 15px;">
-            You’ll receive another update once your order has been shipped. If you have any questions or need assistance, feel free to contact our support team.
+            If you have any questions or need assistance, feel free to contact our support team.
         </p>
 
         <p style="font-size: 15px;">Thank you for choosing <strong>Pavaman</strong>.<br>We hope you enjoy your purchase!</p>
@@ -3704,7 +3704,7 @@ def edit_profile_mobile_otp_handler(request):
                 otp = random.randint(100000, 999999)
                 customer.otp = otp
                 customer.save(update_fields=["otp"])
-                message = f"Hello, your OTP to verify your current mobile number for Pavaman Aviation is: {otp}. Please do not share this OTP with anyone."
+                message = f"Hello, Your OTP to verify your current mobile number for Pavaman Aviation is: {otp}. Please do not share this OTP with anyone."
 
                 send_bulk_sms([customer.mobile_no], message)
 
@@ -3910,7 +3910,7 @@ def send_email_verification_otp_email(customer):
             </p>
 
             <p style="color: #555; margin-bottom: 30px;">
-                Use the OTP below to verify your email. This OTP is valid for 2 minutes.
+                Use the OTP below to verify your email.
             </p>
           
             <p class="otp" style="font-size: 28px; font-weight: bold; color: #4450A2; background: #f2f2f2; display: block; padding: 12px 24px; border-radius: 10px; letter-spacing: 4px; width: fit-content; margin: 0 auto;">
