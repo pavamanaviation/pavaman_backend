@@ -3739,7 +3739,7 @@ def edit_profile_mobile_otp_handler(request):
                 customer.otp = otp
                 customer.mobile_no = new_mobile
                 customer.save(update_fields=["otp", "mobile_no"])
-                message = f"Hello, your OTP to verify your new mobile number for Pavaman Aviation is: {otp}. Please do not share this OTP with anyone."
+                message = f"Hello, Your OTP to verify your new mobile number for Pavaman Aviation is: {otp}. Please do not share this OTP with anyone."
 
                 send_bulk_sms([new_mobile], message)
 
