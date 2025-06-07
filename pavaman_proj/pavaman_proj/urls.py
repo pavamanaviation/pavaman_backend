@@ -28,17 +28,19 @@ from pavaman_backend.views import (add_admin,admin_login,admin_logout,
     product_discount_inventory_view,download_inventory_products_excel,upload_products_excel
     )
 from pavaman_backend.customer_views import (customer_register,customer_login,view_categories_and_discounted_products,
-    view_sub_categories_and_discounted_products,view_products_by_category_and_subcategory,
+    view_sub_categories_and_discounted_products,
     view_products_details,add_product_to_cart,view_product_cart,delete_product_cart,delete_selected_products_cart,add_customer_address,
     view_customer_address,edit_customer_address,delete_customer_address,order_multiple_products,multiple_order_summary
-    ,cancel_multiple_orders,filter_product_price,filter_product_price_each_category,sort_products_inside_subcategory,
+    ,cancel_multiple_orders,filter_product_price_each_category,sort_products_inside_subcategory,
     get_customer_details_by_admin,verify_email,resend_verification_email,google_login,update_cart_quantity,
-    google_submit_mobile,otp_generate,verify_otp,set_new_password,
+    google_submit_mobile,otp_generate,verify_otp,set_new_password,filter_and_sort_products_each_subcategory,
     create_razorpay_order,razorpay_callback,customer_search_categories,customer_search_subcategories,customer_search_products,
     get_payment_details_by_order, download_material_file,customer_get_payment_details_by_order,customer_logout,
     report_monthly_revenue_by_year,report_sales_summary, edit_customer_profile,get_customer_profile,
     top_five_selling_products,get_all_category_subcategory,not_selling_products,filter_my_order,
-    generate_invoice_for_customer,admin_order_status,customer_cart_view_search,edit_profile_mobile_otp_handler,edit_profile_email_otp_handler,filter_and_sort_products,submit_feedback_rating,edit_feedback_rating,view_rating
+    generate_invoice_for_customer,admin_order_status,customer_cart_view_search,edit_profile_mobile_otp_handler,
+    edit_profile_email_otp_handler,filter_and_sort_products,submit_feedback_rating,edit_feedback_rating,view_rating,
+    add_to_wishlist,view_wishlist,latest_products_current_year
 )
 from django.conf.urls.static import static
 from django.conf import settings
@@ -82,7 +84,7 @@ urlpatterns = [
     path("set-new-password", set_new_password, name="set_new_password"),
     path('',view_categories_and_discounted_products,name='view_categories_and_discounted_products'),
     path('categories/view-sub-categories/', view_sub_categories_and_discounted_products, name='view_sub_categories_and_discounted_products'),
-    path('categories/<str:category_name>/<str:sub_category_name>/',view_products_by_category_and_subcategory,name='view_products_by_category_and_subcategory'),
+    # path('categories/<str:category_name>/<str:sub_category_name>/',view_products_by_category_and_subcategory,name='view_products_by_category_and_subcategory'),
     path('products/<str:product_name>/', view_products_details, name='view_products_details'),
     path('add-cart-product',add_product_to_cart,name='add_product_to_cart'),
     path('view-cart-products',view_product_cart,name='view_product_cart'),
@@ -96,7 +98,6 @@ urlpatterns = [
     path('products/order-multiple-products',order_multiple_products,name='order_multiple_products'),
     path('products/order-multiple-products-summary',multiple_order_summary,name='multiple_order_summary'),
     path('products/cancel-multiple-orders',cancel_multiple_orders,name='cancel_multiple_orders'),
-    path('filter-product-price',filter_product_price,name='filter_product_price'),
     path('filter-product-price-each-category',filter_product_price_each_category,name= 'filter_product_price_each_category'),
     path('sort-products-inside-subcategory',sort_products_inside_subcategory,name= 'sort_products_inside_subcategory'),
     path("get-customer-by-admin/", get_customer_details_by_admin, name="get_customer_details_by_admin"),
@@ -137,7 +138,9 @@ urlpatterns = [
     path('download-inventory-products-excel',download_inventory_products_excel,name= 'download_inventory_products_excel'),
     path('download-average-rating-excel',download_average_rating_excel,name= 'download_average_rating_excel'),
     path('upload-products-excel',upload_products_excel,name= 'upload_products_excel'),
-
-
+    path('filter_and_sort_products_each_subcategory',filter_and_sort_products_each_subcategory,name= 'filter_and_sort_products_each_subcategory'),
+    path('add-to-wishlist',add_to_wishlist,name= 'add_to_wishlist'),
+    path('view-wishlist',view_wishlist,name= 'view_wishlist'),
+    path('latest-products', latest_products_current_year, name='latest_products_current_year'),
 
 ]+ static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
