@@ -221,3 +221,4 @@ class Wishlist(models.Model):
 
     def __str__(self):
         return f"{self.customer.email} - {self.product.product_name}"
+    #####################
