@@ -37,7 +37,6 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'pavaman_backend',
     'corsheaders',
-    # 'social_django',
 ]
 
 MIDDLEWARE = [
@@ -118,19 +117,7 @@ STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-CORS_ALLOW_ALL_ORIGINS = True  # Allow all origins
-# CORS_ALLOWED_ORIGINS = [  # Comment out or remove specific origins
-#     "http://localhost:3000",
-#     "http://3.110.62.38:3000",
-#     "http://3.110.62.38:8001",
-# ]
-
-# Comment out CSRF_TRUSTED_ORIGINS since we're not using CSRF in development
-# CSRF_TRUSTED_ORIGINS = [
-#     "http://localhost:3000",
-#     "http://3.110.62.38:3000",
-#     "http://3.110.62.38:8001",
-# ]
+CORS_ALLOW_ALL_ORIGINS = True
 
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_METHODS = [
@@ -173,10 +160,8 @@ LOGOUT_REDIRECT_URL = '/'
 
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
-# EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-
 EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.gmail.com')
-EMAIL_PORT = int(os.getenv('EMAIL_PORT', 587))  # Convert port to integer
+EMAIL_PORT = int(os.getenv('EMAIL_PORT', 587))
 EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True') == 'True'
 EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
@@ -192,18 +177,18 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 DATA_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024  # 50MB
 FILE_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024  # 50MB
 
-from decouple import config
-
-
-TWILIO_ACCOUNT_SID = config("TWILIO_ACCOUNT_SID")
-TWILIO_AUTH_TOKEN = config("TWILIO_AUTH_TOKEN")
-TWILIO_PHONE_NUMBER = config("TWILIO_PHONE_NUMBER")
+MSG91_AUTH_KEY = config('MSG91_AUTH_KEY')
+MSG91_SENDER_ID = config('MSG91_SENDER_ID')
+MSG91_ORDER_CONFIRM_FLOW_ID = config("MSG91_ORDER_CONFIRM_FLOW_ID")
+MSG91_COUNTRY = config('MSG91_COUNTRY', default='91')
+MSG91_SMS_URL = config('MSG91_SMS_URL')
+MSG91_FLOW_ID_RESETPASSWORD = config('MSG91_FLOW_ID_RESETPASSWORD')
+MSG91_FLOW_ID_MOILE_VERIFY = config('MSG91_FLOW_ID_MOILE_VERIFY')
 
 RAZORPAY_KEY_ID = config("RAZORPAY_KEY_ID")
 RAZORPAY_KEY_SECRET = config("RAZORPAY_KEY_SECRET")
 
 SECURE_CROSS_ORIGIN_OPENER_POLICY = None
-
 
 AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")

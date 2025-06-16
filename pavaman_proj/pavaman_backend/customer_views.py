@@ -29,9 +29,10 @@ from .models import (
     SubCategoryDetails, CartProducts, CustomerAddress, OrderProducts,
     PaymentDetails, FeedbackRating,Wishlist
 )
-from .sms_utils import send_bulk_sms
 import threading
-# from .msg91 import send_bulk_sms
+from .msg91 import send_bulk_sms,send_verify_mobile,send_order_confirmation_sms
+
+
 def is_valid_password(password):
     if len(password) < 8:
         return "Password must be at least 8 characters long."
@@ -454,7 +455,7 @@ def otp_generate(request):
                     "reset_token":customer.reset_link
                     })
             else:
-                send_bulk_sms([identifier], f"Hello! This is your OTP for password reset on Pavaman Aviation: {otp}. It is valid for 2 minutes. Do not share it with anyone.")
+                send_bulk_sms([identifier],otp)
                 return JsonResponse({
                     "message": "OTP sent to mobile number",
                     "reset_token":customer.reset_link
@@ -2099,12 +2100,11 @@ def razorpay_callback(request):
                     )                    
                     mobile_no = first_order.customer.mobile_no
                     print(mobile_no)
-                    sms_message = (
-                        f"Hello {first_order.customer.first_name}, your order (ID: {product_order_id}) is confirmed. "
-                        f"Payment of ₹{grand_total} received. Thanks for shopping with Pavaman!"
-                    )
+                    order_id = product_order_id
+                    amount = grand_total
+
                     try:
-                        send_bulk_sms([mobile_no], sms_message)
+                        send_order_confirmation_sms([mobile_no], order_id, amount)
                     except Exception as e:
                         print(f"SMS send failed: {str(e)}")
                     return JsonResponse({
@@ -4175,9 +4175,7 @@ def edit_profile_mobile_otp_handler(request):
                 otp = random.randint(100000, 999999)
                 customer.otp = otp
                 customer.save(update_fields=["otp"])
-                message = f"Hello, Your OTP to verify your current mobile number for Pavaman Aviation is: {otp}. Please do not share this OTP with anyone."
-
-                send_bulk_sms([customer.mobile_no], message)
+                send_verify_mobile([customer.mobile_no], otp)
 
                 return JsonResponse({
                     "message": "OTP sent to previous mobile number.",
@@ -4210,9 +4208,7 @@ def edit_profile_mobile_otp_handler(request):
                 customer.otp = otp
                 customer.mobile_no = new_mobile
                 customer.save(update_fields=["otp", "mobile_no"])
-                message = f"Hello, Your OTP to verify your new mobile number for Pavaman Aviation is: {otp}. Please do not share this OTP with anyone."
-
-                send_bulk_sms([new_mobile], message)
+                send_verify_mobile([new_mobile],otp)
 
                 return JsonResponse({
                     "message": "OTP sent to new mobile number.",

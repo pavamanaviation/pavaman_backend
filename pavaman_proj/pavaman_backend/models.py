@@ -5,7 +5,6 @@ import uuid
 from datetime import datetime, timedelta
 from django.contrib.postgres.fields import ArrayField 
 from django.db.models import JSONField  
-
 class PavamanAdminDetails(models.Model):
     username = models.CharField(max_length=120, unique=True)
     email = models.EmailField(unique=True)
@@ -13,20 +12,16 @@ class PavamanAdminDetails(models.Model):
     otp = models.IntegerField(null=True, blank=True)
     password = models.CharField(max_length=255)
     status = models.IntegerField(default=1)
-
     def __str__(self):
         return self.username
-
 class CategoryDetails(models.Model):
     category_name = models.CharField(max_length=120)
     created_at = models.DateTimeField()
     category_image = models.CharField(max_length=120)
     admin = models.ForeignKey(PavamanAdminDetails, on_delete=models.CASCADE)
     category_status = models.IntegerField(default=1)
-
     def __str__(self):
         return self.category_name
-
 class SubCategoryDetails(models.Model):
     sub_category_name = models.CharField(max_length=120)
     created_at = models.DateTimeField()
@@ -34,10 +29,8 @@ class SubCategoryDetails(models.Model):
     admin = models.ForeignKey(PavamanAdminDetails, on_delete=models.CASCADE)
     category = models.ForeignKey(CategoryDetails, on_delete=models.CASCADE)
     sub_category_status = models.IntegerField(default=1)
-
     def __str__(self):
         return self.sub_category_name
-
 class ProductsDetails(models.Model):
     product_name = models.CharField(max_length=200)
     sku_number = models.CharField(max_length=100, unique=True)
@@ -62,7 +55,6 @@ class ProductsDetails(models.Model):
     hsn_code = models.CharField(max_length=30, default='')
     def __str__(self):
         return self.product_name
-
 class CustomerRegisterDetails(models.Model):
     first_name = models.CharField(max_length=255)
     last_name = models.CharField(max_length=255)
@@ -84,14 +76,12 @@ class CustomerRegisterDetails(models.Model):
         if self.password and not self.password.startswith("pbkdf2_sha256$"):
             self.password = make_password(self.password)
         super().save(*args, **kwargs)
-        
     def is_otp_valid(self):
-        """Check if OTP is still valid (within 2 minutes)."""
+        """Check if OTP is still valid (within 5 minutes)."""
         if self.changed_on:
-            expiry_time = self.changed_on + timedelta(minutes=2)
+            expiry_time = self.changed_on + timedelta(minutes=5)
             return timezone.now() < expiry_time
         return False
-
     def clear_expired_otp(self):
         """Set OTP and reset_link to NULL if expired."""
         if not self.is_otp_valid():
@@ -99,10 +89,8 @@ class CustomerRegisterDetails(models.Model):
             self.reset_link = None
             self.changed_on = None
             self.save()
-
     def _str_(self):
         return self.email
- 
 class CartProducts(models.Model):
     customer = models.ForeignKey(CustomerRegisterDetails, on_delete=models.CASCADE)
     product = models.ForeignKey(ProductsDetails, on_delete=models.CASCADE)
@@ -112,8 +100,10 @@ class CartProducts(models.Model):
     added_at = models.DateTimeField()
     admin = models.ForeignKey(PavamanAdminDetails, on_delete=models.CASCADE)
 
+
     def __str__(self):
         return f"{self.customer} - {self.product} ({self.quantity})"
+
 class CustomerAddress(models.Model):
     ADDRESS_TYPE_CHOICES = [
         ('home', 'Home'),
@@ -141,13 +131,17 @@ class CustomerAddress(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     select_address = models.BooleanField(default=False)
+
+
     def __str__(self):
         return f"{self.first_name} {self.last_name} - {self.address_type} ({self.pincode})"
+
+
 class OrderProducts(models.Model):
     customer = models.ForeignKey(CustomerRegisterDetails, on_delete=models.CASCADE)
     product = models.ForeignKey(ProductsDetails, on_delete=models.CASCADE)
-    category = models.ForeignKey(CategoryDetails, on_delete=models.CASCADE)
-    sub_category = models.ForeignKey(SubCategoryDetails, on_delete=models.CASCADE)
+    category = models.CharField(max_length=255)
+    sub_category = models.CharField(max_length=255)
     quantity = models.IntegerField()
     price = models.DecimalField(max_digits=10, decimal_places=2)
     final_price = models.DecimalField(max_digits=10, decimal_places=2)
@@ -191,9 +185,12 @@ class PaymentDetails(models.Model):
     product_order_id = models.CharField(default="")
     invoice_number = models.CharField(default="")
     invoice_date = models.DateTimeField(auto_now_add=True,null=True)
+    order_status= models.CharField(default="")
+    Delivery_status = models.CharField(default="")
     
     def str(self):
         return f"Order {self.razorpay_order_id} - {self.payment_type} ({self.payment_mode})"
+
 class FeedbackRating(models.Model):
     admin = models.ForeignKey(PavamanAdminDetails, on_delete=models.CASCADE)
     customer = models.ForeignKey(CustomerRegisterDetails, on_delete=models.CASCADE)
@@ -201,8 +198,8 @@ class FeedbackRating(models.Model):
     order_product = models.ForeignKey(OrderProducts, on_delete=models.CASCADE)
     order_id = models.CharField(max_length=255) 
     product = models.ForeignKey(ProductsDetails, on_delete=models.CASCADE) 
-    category = models.ForeignKey(CategoryDetails, on_delete=models.CASCADE)
-    sub_category = models.ForeignKey(SubCategoryDetails, on_delete=models.CASCADE)
+    category = models.CharField(max_length=255)
+    sub_category = models.CharField(max_length=255)
     rating = models.PositiveSmallIntegerField() 
     feedback = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)

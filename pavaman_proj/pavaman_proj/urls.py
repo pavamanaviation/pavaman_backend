@@ -40,7 +40,7 @@ from pavaman_backend.customer_views import (customer_register,customer_login,vie
     top_five_selling_products,get_all_category_subcategory,not_selling_products,filter_my_order,
     generate_invoice_for_customer,admin_order_status,customer_cart_view_search,edit_profile_mobile_otp_handler,
     edit_profile_email_otp_handler,filter_and_sort_products,submit_feedback_rating,edit_feedback_rating,view_rating,
-    add_to_wishlist,view_wishlist,latest_products_current_year
+    add_to_wishlist,view_wishlist,latest_products_current_year,
 )
 from django.conf.urls.static import static
 from django.conf import settings
@@ -142,5 +142,6 @@ urlpatterns = [
     path('add-to-wishlist',add_to_wishlist,name= 'add_to_wishlist'),
     path('view-wishlist',view_wishlist,name= 'view_wishlist'),
     path('latest-products', latest_products_current_year, name='latest_products_current_year'),
+
 
 ]+ static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

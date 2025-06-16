@@ -21,7 +21,7 @@ from django.db.models.functions import TruncMonth
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from openpyxl import Workbook
-from .sms_utils import send_bulk_sms
+from .msg91 import send_verify_mobile
 from pavaman_backend.models import (
     CustomerRegisterDetails, PavamanAdminDetails, CategoryDetails,
     SubCategoryDetails, ProductsDetails, PaymentDetails, OrderProducts,
@@ -114,14 +114,11 @@ def admin_verify_otp(request):
             return JsonResponse({"error": f"Unexpected error: {str(e)}", "status_code": 500}, status=500)
     return JsonResponse({"error": "Only POST method allowed.", "status_code": 405}, status=405)
 def send_otp_sms(mobile_no, otp):
-    import traceback
-    message = f"Your OTP for admin login is: {otp}"
     try:
-        send_bulk_sms([mobile_no], message)
+        send_verify_mobile([mobile_no], otp)
         return True
     except Exception as e:
         print(f"Failed to send OTP to {mobile_no}: {e}")
-        traceback.print_exc()
         return False
 @csrf_exempt
 def admin_logout(request):
