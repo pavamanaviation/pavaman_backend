@@ -140,8 +140,8 @@ class CustomerAddress(models.Model):
 class OrderProducts(models.Model):
     customer = models.ForeignKey(CustomerRegisterDetails, on_delete=models.CASCADE)
     product = models.ForeignKey(ProductsDetails, on_delete=models.CASCADE)
-    category = models.CharField(max_length=255)
-    sub_category = models.CharField(max_length=255)
+    category = models.ForeignKey(CategoryDetails, on_delete=models.CASCADE)
+    sub_category = models.ForeignKey(SubCategoryDetails, on_delete=models.CASCADE)
     quantity = models.IntegerField()
     price = models.DecimalField(max_digits=10, decimal_places=2)
     final_price = models.DecimalField(max_digits=10, decimal_places=2)
@@ -185,8 +185,6 @@ class PaymentDetails(models.Model):
     product_order_id = models.CharField(default="")
     invoice_number = models.CharField(default="")
     invoice_date = models.DateTimeField(auto_now_add=True,null=True)
-    order_status= models.CharField(default="")
-    Delivery_status = models.CharField(default="")
     
     def str(self):
         return f"Order {self.razorpay_order_id} - {self.payment_type} ({self.payment_mode})"
@@ -198,8 +196,8 @@ class FeedbackRating(models.Model):
     order_product = models.ForeignKey(OrderProducts, on_delete=models.CASCADE)
     order_id = models.CharField(max_length=255) 
     product = models.ForeignKey(ProductsDetails, on_delete=models.CASCADE) 
-    category = models.CharField(max_length=255)
-    sub_category = models.CharField(max_length=255)
+    category = models.ForeignKey(CategoryDetails, on_delete=models.CASCADE)
+    sub_category = models.ForeignKey(SubCategoryDetails, on_delete=models.CASCADE)
     rating = models.PositiveSmallIntegerField() 
     feedback = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
