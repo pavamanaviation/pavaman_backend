@@ -460,11 +460,10 @@ def otp_generate(request):
                     "message": "OTP sent to mobile number",
                     "reset_token":customer.reset_link
                     })
-
         except json.JSONDecodeError:
             return JsonResponse({"error": "Invalid JSON data"}, status=400)
-
     return JsonResponse({"error": "Invalid request method"}, status=405)
+
 def send_password_reset_otp_email(customer):
     otp = customer.otp
     email = customer.email
