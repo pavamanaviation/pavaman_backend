@@ -913,96 +913,96 @@ def view_sub_categories_and_discounted_products(request):
     return JsonResponse({"error": "Invalid request method. Use POST.", "status_code": 405}, status=405)
 
 
-# @csrf_exempt
-# def view_products_by_category_and_subcategory(request, category_name, sub_category_name):
-#     if request.method == 'POST':
-#         try:
-#             data = json.loads(request.body)
-#             customer_id = data.get('customer_id')
+@csrf_exempt
+def view_products_by_category_and_subcategory(request, category_name, sub_category_name):
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            customer_id = data.get('customer_id')
 
-#             try:
-#                 category = CategoryDetails.objects.get(category_name=category_name)
-#                 sub_category = SubCategoryDetails.objects.get(sub_category_name=sub_category_name, category=category)
-#                 if customer_id:
-#                     customer = CustomerRegisterDetails.objects.get(id=customer_id)
-#             except CustomerRegisterDetails.DoesNotExist:
-#                 return JsonResponse({"error": "Customer not found.", "status_code": 404}, status=404)
-#             except CategoryDetails.DoesNotExist:
-#                 return JsonResponse({"error": "Category not found.", "status_code": 404}, status=404)
-#             except SubCategoryDetails.DoesNotExist:
-#                 return JsonResponse({"error": "Subcategory not found.", "status_code": 404}, status=404)
-#             products = ProductsDetails.objects.filter(
-#                 category=category, sub_category=sub_category, product_status=1
-#             ).values(
-#                 'id', 'product_name', 'sku_number', 'price', 'availability', 'quantity', 'product_images', 'discount',  'gst','cart_status'
-#             )
+            try:
+                category = CategoryDetails.objects.get(category_name=category_name)
+                sub_category = SubCategoryDetails.objects.get(sub_category_name=sub_category_name, category=category)
+                if customer_id:
+                    customer = CustomerRegisterDetails.objects.get(id=customer_id)
+            except CustomerRegisterDetails.DoesNotExist:
+                return JsonResponse({"error": "Customer not found.", "status_code": 404}, status=404)
+            except CategoryDetails.DoesNotExist:
+                return JsonResponse({"error": "Category not found.", "status_code": 404}, status=404)
+            except SubCategoryDetails.DoesNotExist:
+                return JsonResponse({"error": "Subcategory not found.", "status_code": 404}, status=404)
+            products = ProductsDetails.objects.filter(
+                category=category, sub_category=sub_category, product_status=1
+            ).values(
+                'id', 'product_name', 'sku_number', 'price', 'availability', 'quantity', 'product_images', 'discount',  'gst','cart_status'
+            )
 
-#             if not products.exists():
-#                 return JsonResponse({"error": "No products found for the given sub category.", "status_code": 404}, status=404)
+            if not products.exists():
+                return JsonResponse({"error": "No products found for the given sub category.", "status_code": 404}, status=404)
         
-#             all_prices = [
-#                 round(float(product['price']) - float(product.get('discount', 0)), 2)
-#                 for product in products
-#             ]
-#             min_price = min(all_prices)
-#             max_price = max(all_prices)
+            all_prices = [
+                round(float(product['price']) - float(product.get('discount', 0)), 2)
+                for product in products
+            ]
+            min_price = min(all_prices)
+            max_price = max(all_prices)
 
-#             if min_price == max_price:
-#                 min_price = 0
+            if min_price == max_price:
+                min_price = 0
 
-#             price_range = {
-#                 "product_min_price": min_price,
-#                 "product_max_price": max_price
-#             }
+            price_range = {
+                "product_min_price": min_price,
+                "product_max_price": max_price
+            }
 
-#             product_list = []
-#             for product in products:
-#                 image_path = product['product_images'][0] if isinstance(product['product_images'], list) and product['product_images'] else None
-#                 image_url = f"{settings.AWS_S3_BUCKET_URL}/{image_path}" if image_path else ""
-#                 price = round(float(product['price']), 2)
-#                 discount = float(product.get('discount') or 0)
-#                 gst = float(product.get('gst') or 0)
-#                 discounted_amount = (price * discount) / 100
-#                 final_price = price - discounted_amount
-#                 final_price = round(final_price, 2)
+            product_list = []
+            for product in products:
+                image_path = product['product_images'][0] if isinstance(product['product_images'], list) and product['product_images'] else None
+                image_url = f"{settings.AWS_S3_BUCKET_URL}/{image_path}" if image_path else ""
+                price = round(float(product['price']), 2)
+                discount = float(product.get('discount') or 0)
+                gst = float(product.get('gst') or 0)
+                discounted_amount = (price * discount) / 100
+                final_price = price - discounted_amount
+                final_price = round(final_price, 2)
 
-#                 product_list.append({
-#                     "product_id": str(product['id']),
-#                     "product_name": product['product_name'],
-#                     "sku_number": product['sku_number'],
-#                     "price": price,
-#                     "discount": f"{int(discount)}%",
-#                     "gst": f"{gst}%", 
-#                     "discounted_amount": round(discounted_amount, 2),
-#                     "final_price": final_price,
-#                     "availability": product['availability'],
-#                     "quantity": product['quantity'],
-#                     "product_image_url": image_url,
-#                     "cart_status": product['cart_status']
+                product_list.append({
+                    "product_id": str(product['id']),
+                    "product_name": product['product_name'],
+                    "sku_number": product['sku_number'],
+                    "price": price,
+                    "discount": f"{int(discount)}%",
+                    "gst": f"{gst}%", 
+                    "discounted_amount": round(discounted_amount, 2),
+                    "final_price": final_price,
+                    "availability": product['availability'],
+                    "quantity": product['quantity'],
+                    "product_image_url": image_url,
+                    "cart_status": product['cart_status']
                     
-#                 })
+                })
 
-#             response_data = {
-#                 "message": "Products retrieved successfully.",
-#                 "status_code": 200,
-#                 "category_id":str(category.id),
-#                 "category_name": category_name,
-#                 "sub_category_id":str(sub_category.id),
-#                 "sub_category_name": sub_category_name,
-#                 "product_min_price": price_range["product_min_price"],
-#                 "product_max_price": price_range["product_max_price"],
-#                 "products": product_list
-#             }
+            response_data = {
+                "message": "Products retrieved successfully.",
+                "status_code": 200,
+                "category_id":str(category.id),
+                "category_name": category_name,
+                "sub_category_id":str(sub_category.id),
+                "sub_category_name": sub_category_name,
+                "product_min_price": price_range["product_min_price"],
+                "product_max_price": price_range["product_max_price"],
+                "products": product_list
+            }
 
-#             if customer_id:
-#                 response_data["customer_id"] = str(customer_id)
+            if customer_id:
+                response_data["customer_id"] = str(customer_id)
 
-#             return JsonResponse(response_data, status=200)
+            return JsonResponse(response_data, status=200)
 
-#         except Exception as e:
-#             return JsonResponse({"error": f"An unexpected error occurred: {str(e)}", "status_code": 500}, status=500)
+        except Exception as e:
+            return JsonResponse({"error": f"An unexpected error occurred: {str(e)}", "status_code": 500}, status=500)
 
-#     return JsonResponse({"error": "Invalid HTTP method. Use POST.", "status_code": 405}, status=405)
+    return JsonResponse({"error": "Invalid HTTP method. Use POST.", "status_code": 405}, status=405)
 @csrf_exempt
 def view_products_details(request, product_name):
     if request.method == 'POST':
@@ -2097,13 +2097,12 @@ def razorpay_callback(request):
                         order_id=product_order_id,
                         transaction_id=transaction_id,
                     )                    
-                    mobile_no = first_order.customer.mobile_no
-                    print(mobile_no)
+                    mobile_number = first_order.customer.mobile_no
                     order_id = product_order_id
                     amount = grand_total
 
                     try:
-                        send_order_confirmation_sms([mobile_no], order_id, amount)
+                        send_order_confirmation_sms([mobile_number], order_id, amount)
                     except Exception as e:
                         print(f"SMS send failed: {str(e)}")
                     return JsonResponse({
