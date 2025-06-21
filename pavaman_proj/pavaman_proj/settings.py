@@ -24,7 +24,7 @@ SECRET_KEY = os.getenv('SECRET_KEY')
 
 DEBUG = os.getenv('DEBUG') == 'True'
 
-ALLOWED_HOSTS = ['*']  # Allow all hosts
+ALLOWED_HOSTS = ['*'] 
 
 
 
@@ -108,11 +108,8 @@ USE_I18N = True
 USE_TZ = True
 
 
-
-
 import os 
 STATIC_URL = 'static/'
-STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
 
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
