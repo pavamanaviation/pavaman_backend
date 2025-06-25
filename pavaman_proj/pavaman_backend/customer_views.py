@@ -154,6 +154,7 @@ def verify_email(request, verification_link):
             "error": "Invalid verification link.",
             "status_code": 400,
         }, status=400)
+    
 def send_verification_email(email, first_name, verification_link):
     subject = "[Pavaman] Please Verify Your Email"
 
@@ -4527,7 +4528,8 @@ def latest_products_current_year(request):
             current_year = datetime.now().year
             products = ProductsDetails.objects.filter(
                 created_at__year=current_year
-            ).order_by('-created_at')
+            ).order_by('-created_at')[:50]
+
             wishlist_product_ids = get_wishlist_product_ids(customer_id)
             if not products.exists():
                 return JsonResponse({
