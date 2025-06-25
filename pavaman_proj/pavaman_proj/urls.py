@@ -84,7 +84,6 @@ urlpatterns = [
     path("set-new-password", set_new_password, name="set_new_password"),
     path('',view_categories_and_discounted_products,name='view_categories_and_discounted_products'),
     path('categories/view-sub-categories/', view_sub_categories_and_discounted_products, name='view_sub_categories_and_discounted_products'),
-    # path('categories/<str:category_name>/<str:sub_category_name>/',view_products_by_category_and_subcategory,name='view_products_by_category_and_subcategory'),
     path('products/<str:product_name>/', view_products_details, name='view_products_details'),
     path('add-cart-product',add_product_to_cart,name='add_product_to_cart'),
     path('view-cart-products',view_product_cart,name='view_product_cart'),

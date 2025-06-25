@@ -789,7 +789,7 @@ def upload_products_excel(request):
         for img_name in image_names:
             img_name = img_name.strip()
             if img_name:
-                all_image_names.append(img_name.lower())  # case-insensitive check
+                all_image_names.append(img_name.lower())
         material_name = str(row_data.get('material_paths') or '').strip()
         if material_name:
             all_material_names.append(material_name.lower())
@@ -1316,7 +1316,7 @@ def edit_product(request):
             product.product_images = product_images
             if old_product_name != product_name and product.material_file:
                 old_material_key = product.material_file
-                file_extension = old_material_key.split('.')[-1]  # e.g., 'pdf'
+                file_extension = old_material_key.split('.')[-1]
                 new_material_key = f"static/materials/{product_name}.{file_extension}"
                 try:
                     s3.copy_object(

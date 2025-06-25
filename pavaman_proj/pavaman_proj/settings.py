@@ -14,7 +14,6 @@ from pathlib import Path
 from dotenv import load_dotenv
 from decouple import config
 
-# Load environment variables from .env file
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -44,7 +43,7 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
-    # 'django.middleware.csrf.CsrfViewMiddleware',  # Comment out CSRF middleware for development
+    'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
@@ -137,8 +136,6 @@ CORS_ALLOW_HEADERS = [
     "x-requested-with",
 ]
 
-# Google OAuth Credentials
-
 GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID')
 GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET')
 
@@ -150,7 +147,6 @@ AUTHENTICATION_BACKENDS = (
 SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = GOOGLE_CLIENT_ID
 SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET = GOOGLE_CLIENT_SECRET
 
-# Redirect after login/logout
 LOGIN_URL = '/customer-login'
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/'
@@ -164,15 +160,13 @@ EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL')
 SITE_URL = os.getenv('SITE_URL')
-# SITE_URL = 'http://yourdomain.com'  # Your website URL
+# SITE_URL = 'http://yourdomain.com'
 
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-
-# Increase file upload limit (default is 2.5MB)
-DATA_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024  # 50MB
-FILE_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024  # 50MB
+DATA_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024
+FILE_UPLOAD_MAX_MEMORY_SIZE = 50 * 1024 * 1024
 
 MSG91_AUTH_KEY = config('MSG91_AUTH_KEY')
 MSG91_SENDER_ID = config('MSG91_SENDER_ID')
@@ -193,6 +187,6 @@ AWS_STORAGE_BUCKET_NAME = os.getenv("AWS_STORAGE_BUCKET_NAME")
 AWS_S3_REGION_NAME = os.getenv("AWS_S3_REGION_NAME")
 
 AWS_S3_BUCKET_URL = f"https://{AWS_STORAGE_BUCKET_NAME}.s3.{AWS_S3_REGION_NAME}.amazonaws.com"
-import os
+
 FRONTEND_URL = os.getenv("FRONTEND_URL")
 RAZORPAY_CALLBACK_URL = os.getenv("RAZORPAY_CALLBACK_URL")
