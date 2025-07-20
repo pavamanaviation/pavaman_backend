@@ -9,7 +9,7 @@ import calendar
 from datetime import datetime, timedelta
 from collections import Counter
 from decimal import Decimal
-from django.http import JsonResponse, FileResponse
+from django.http import Http404, HttpResponse, JsonResponse, FileResponse, StreamingHttpResponse
 from django.conf import settings
 from django.utils import timezone
 from django.utils.timezone import now
@@ -1217,114 +1217,232 @@ def delete_selected_products_cart(request):
 
     return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
 
+# PINCODE_API_URL = "https://api.postalpincode.in/pincode/"
+# GEOLOCATION_API_URL = "https://nominatim.openstreetmap.org/search"
+# @csrf_exempt
+# def add_customer_address(request):
+#     if request.method == 'POST':
+#         try:
+#             data = json.loads(request.body.decode('utf-8'))
+#             customer_id = data.get("customer_id")
+#             first_name = data.get("first_name")
+#             last_name = data.get("last_name")
+#             email = data.get("email")
+#             mobile_number = data.get("mobile_number")
+#             alternate_mobile = data.get("alternate_mobile", "")
+#             address_type = data.get("address_type", "home")
+#             pincode = data.get("pincode")
+#             street = data.get("street")
+#             landmark = data.get("landmark", "")
+
+#             if not all([customer_id, first_name, last_name, email, mobile_number, pincode, street]):
+#                 return JsonResponse({"error": "All required fields must be provided.", "status_code": 400}, status=400)
+
+#             try:
+#                 customer = CustomerRegisterDetails.objects.get(id=customer_id)
+#             except CustomerRegisterDetails.DoesNotExist:
+#                 return JsonResponse({"error": "Customer does not exist.", "status_code": 400}, status=400)
+
+#             postoffice = mandal = village = district = state = country = ""
+#             latitude = longitude = None
+
+#             response = requests.get(f"{PINCODE_API_URL}{pincode}")
+#             if response.status_code == 200:
+#                 pincode_data = response.json()
+#                 if pincode_data and pincode_data[0].get("Status") == "Success":
+#                     post_office_data = pincode_data[0].get("PostOffice", [])[0] if pincode_data[0].get("PostOffice") else {}
+
+#                     postoffice = post_office_data.get("BranchType", "")
+#                     village = post_office_data.get("Name", "")
+#                     mandal = post_office_data.get("Block", "")
+#                     district = post_office_data.get("District", "")
+#                     state = post_office_data.get("State", "")
+#                     country = post_office_data.get("Country", "India")
+
+#             geo_params = {
+#                 "q": f"{pincode},{district},{state},{country}",
+#                 "format": "json",
+#                 "limit": 1
+#             }
+
+#             geo_headers = {
+#                 "User-Agent": "MyDjangoApp/1.0 saralkumar.kapilit@gmail.com"
+#             }
+
+#             geo_response = requests.get(GEOLOCATION_API_URL, params=geo_params, headers=geo_headers)
+
+#             if geo_response.status_code == 200:
+#                 geo_data = geo_response.json()
+#                 if geo_data:
+#                     latitude = geo_data[0].get("lat")
+#                     longitude = geo_data[0].get("lon")
+#                 else:
+#                     return JsonResponse({"error": "Failed to fetch latitude and longitude for the provided address.", "status_code": 400}, status=400)
+#             else:
+#                 return JsonResponse({"error": "Geolocation API request failed.", "status_code": geo_response.status_code}, status=geo_response.status_code)
+
+#             customer_address = CustomerAddress.objects.create(
+#                 customer=customer,
+#                 first_name=first_name,
+#                 last_name=last_name,
+#                 email=email,
+#                 mobile_number=mobile_number,
+#                 alternate_mobile=alternate_mobile,
+#                 address_type=address_type,
+#                 pincode=pincode,
+#                 street=street,
+#                 landmark=landmark,
+#                 village=village,
+#                 mandal=mandal,
+#                 postoffice=postoffice,
+#                 district=district,
+#                 state=state,
+#                 country=country,
+#                 latitude=latitude,
+#                 longitude=longitude
+#             )
+
+#             return JsonResponse({
+#                 "message": "Customer address added successfully.",
+#                 "status_code": 200,
+#                 "address_id": customer_address.id,
+#                 "pincode_details": {
+#                     "postoffice": postoffice,
+#                     "village": village,
+#                     "mandal": mandal,
+#                     "district": district,
+#                     "state": state,
+#                     "country": country,
+#                     "landmark": landmark,
+#                     "latitude": latitude,
+#                     "longitude": longitude
+#                 }
+#             }, status=200)
+
+#         except json.JSONDecodeError:
+#             return JsonResponse({"error": "Invalid JSON format.", "status_code": 400}, status=400)
+#         except Exception as e:
+#             return JsonResponse({"error": f"An unexpected error occurred: {str(e)}", "status_code": 500}, status=500)
+
+#     return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
+from django.views.decorators.csrf import csrf_exempt
+from django.http import JsonResponse
+from .models import CustomerRegisterDetails, CustomerAddress
+import json
+import requests
+
 PINCODE_API_URL = "https://api.postalpincode.in/pincode/"
 GEOLOCATION_API_URL = "https://nominatim.openstreetmap.org/search"
+
 @csrf_exempt
 def add_customer_address(request):
-    if request.method == 'POST':
+    if request.method != 'POST':
+        return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
+
+    try:
+        data = json.loads(request.body.decode('utf-8'))
+        customer_id = data.get("customer_id")
+        first_name = data.get("first_name")
+        last_name = data.get("last_name")
+        email = data.get("email")
+        mobile_number = data.get("mobile_number")
+        alternate_mobile = data.get("alternate_mobile", "")
+        address_type = data.get("address_type", "home")
+        pincode = data.get("pincode")
+        street = data.get("street")
+        landmark = data.get("landmark", "")
+
+        if not all([customer_id, first_name, last_name, email, mobile_number, pincode, street]):
+            return JsonResponse({"error": "All required fields must be provided.", "status_code": 400}, status=400)
+
         try:
-            data = json.loads(request.body.decode('utf-8'))
-            customer_id = data.get("customer_id")
-            first_name = data.get("first_name")
-            last_name = data.get("last_name")
-            email = data.get("email")
-            mobile_number = data.get("mobile_number")
-            alternate_mobile = data.get("alternate_mobile", "")
-            address_type = data.get("address_type", "home")
-            pincode = data.get("pincode")
-            street = data.get("street")
-            landmark = data.get("landmark", "")
+            customer = CustomerRegisterDetails.objects.get(id=customer_id)
+        except CustomerRegisterDetails.DoesNotExist:
+            return JsonResponse({"error": "Customer does not exist.", "status_code": 400}, status=400)
 
-            if not all([customer_id, first_name, last_name, email, mobile_number, pincode, street]):
-                return JsonResponse({"error": "All required fields must be provided.", "status_code": 400}, status=400)
+        # Initialize
+        postoffice = mandal = village = district = state = country = ""
+        latitude = longitude = None
 
-            try:
-                customer = CustomerRegisterDetails.objects.get(id=customer_id)
-            except CustomerRegisterDetails.DoesNotExist:
-                return JsonResponse({"error": "Customer does not exist.", "status_code": 400}, status=400)
-
-            postoffice = mandal = village = district = state = country = ""
-            latitude = longitude = None
-
-            response = requests.get(f"{PINCODE_API_URL}{pincode}")
+        # Get post office details from pincode API
+        try:
+            response = requests.get(f"{PINCODE_API_URL}{pincode}", timeout=5)
             if response.status_code == 200:
                 pincode_data = response.json()
-                if pincode_data and pincode_data[0].get("Status") == "Success":
-                    post_office_data = pincode_data[0].get("PostOffice", [])[0] if pincode_data[0].get("PostOffice") else {}
+                post_offices = pincode_data[0].get("PostOffice", [])
+                if post_offices:
+                    office = post_offices[0]
+                    postoffice = office.get("BranchType", "")
+                    village = office.get("Name", "")
+                    mandal = office.get("Block", "")
+                    district = office.get("District", "")
+                    state = office.get("State", "")
+                    country = office.get("Country", "India")
+        except Exception as e:
+            print(f"[PINCODE API ERROR] {str(e)}")
 
-                    postoffice = post_office_data.get("BranchType", "")
-                    village = post_office_data.get("Name", "")
-                    mandal = post_office_data.get("Block", "")
-                    district = post_office_data.get("District", "")
-                    state = post_office_data.get("State", "")
-                    country = post_office_data.get("Country", "India")
-
+        # Fetch latitude and longitude
+        try:
             geo_params = {
                 "q": f"{pincode},{district},{state},{country}",
                 "format": "json",
                 "limit": 1
             }
-
             geo_headers = {
                 "User-Agent": "MyDjangoApp/1.0 saralkumar.kapilit@gmail.com"
             }
-
-            geo_response = requests.get(GEOLOCATION_API_URL, params=geo_params, headers=geo_headers)
-
+            geo_response = requests.get(GEOLOCATION_API_URL, params=geo_params, headers=geo_headers, timeout=5)
             if geo_response.status_code == 200:
                 geo_data = geo_response.json()
                 if geo_data:
                     latitude = geo_data[0].get("lat")
                     longitude = geo_data[0].get("lon")
-                else:
-                    return JsonResponse({"error": "Failed to fetch latitude and longitude for the provided address.", "status_code": 400}, status=400)
-            else:
-                return JsonResponse({"error": "Geolocation API request failed.", "status_code": geo_response.status_code}, status=geo_response.status_code)
-
-            customer_address = CustomerAddress.objects.create(
-                customer=customer,
-                first_name=first_name,
-                last_name=last_name,
-                email=email,
-                mobile_number=mobile_number,
-                alternate_mobile=alternate_mobile,
-                address_type=address_type,
-                pincode=pincode,
-                street=street,
-                landmark=landmark,
-                village=village,
-                mandal=mandal,
-                postoffice=postoffice,
-                district=district,
-                state=state,
-                country=country,
-                latitude=latitude,
-                longitude=longitude
-            )
-
-            return JsonResponse({
-                "message": "Customer address added successfully.",
-                "status_code": 200,
-                "address_id": customer_address.id,
-                "pincode_details": {
-                    "postoffice": postoffice,
-                    "village": village,
-                    "mandal": mandal,
-                    "district": district,
-                    "state": state,
-                    "country": country,
-                    "landmark": landmark,
-                    "latitude": latitude,
-                    "longitude": longitude
-                }
-            }, status=200)
-
-        except json.JSONDecodeError:
-            return JsonResponse({"error": "Invalid JSON format.", "status_code": 400}, status=400)
         except Exception as e:
-            return JsonResponse({"error": f"An unexpected error occurred: {str(e)}", "status_code": 500}, status=500)
+            print(f"[GEOLOCATION ERROR] {str(e)}")
 
-    return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
+        # Save address
+        customer_address = CustomerAddress.objects.create(
+            customer=customer,
+            first_name=first_name,
+            last_name=last_name,
+            email=email,
+            mobile_number=mobile_number,
+            alternate_mobile=alternate_mobile,
+            address_type=address_type,
+            pincode=pincode,
+            street=street,
+            landmark=landmark,
+            village=village,
+            mandal=mandal,
+            postoffice=postoffice,
+            district=district,
+            state=state,
+            country=country,
+            latitude=latitude,
+            longitude=longitude
+        )
+
+        return JsonResponse({
+            "message": "Customer address added successfully.",
+            "status_code": 200,
+            "address_id": customer_address.id,
+            "pincode_details": {
+                "postoffice": postoffice,
+                "village": village,
+                "mandal": mandal,
+                "district": district,
+                "state": state,
+                "country": country,
+                "landmark": landmark,
+                "latitude": latitude,
+                "longitude": longitude
+            }
+        }, status=200)
+
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON format.", "status_code": 400}, status=400)
+    except Exception as e:
+        return JsonResponse({"error": f"An unexpected error occurred: {str(e)}", "status_code": 500}, status=500)
 
 
 @csrf_exempt
@@ -1378,6 +1496,111 @@ def view_customer_address(request):
     return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
 
 
+# GEOLOCATION_API_URL = "https://nominatim.openstreetmap.org/search"
+
+# @csrf_exempt
+# def edit_customer_address(request):
+#     if request.method == 'POST':
+#         try:
+#             data = json.loads(request.body.decode('utf-8'))
+#             address_id = data.get("address_id")
+#             customer_id = data.get("customer_id")
+#             first_name = data.get("first_name")
+#             last_name = data.get("last_name")
+#             email = data.get("email")
+#             mobile_number = data.get("mobile_number")
+#             alternate_mobile = data.get("alternate_mobile", "")
+#             address_type = data.get("address_type", "home")
+#             pincode = data.get("pincode")
+#             street = data.get("street")
+#             landmark = data.get("landmark", "")
+#             latitude = data.get("latitude")
+#             longitude = data.get("longitude")
+
+#             if not all([address_id, customer_id, first_name, last_name, email, mobile_number, pincode, street]):
+#                 return JsonResponse({"error": "All required fields must be provided.", "status_code": 400}, status=400)
+
+#             try:
+#                 customer_address = CustomerAddress.objects.get(id=address_id, customer_id=customer_id)
+#             except CustomerAddress.DoesNotExist:
+#                 return JsonResponse({"error": "Address not found.", "status_code": 404}, status=404)
+#             try:
+#                 response = requests.get(f"https://api.postalpincode.in/pincode/{pincode}")
+#                 response_data = response.json()
+#                 if response_data[0]['Status'] == 'Success':
+#                     post_office_data = response_data[0]['PostOffice'][0]
+#                     customer_address.village = post_office_data.get('Name', '')
+#                     customer_address.mandal = post_office_data.get('Block', '')
+#                     customer_address.postoffice = post_office_data.get('Name', '')
+#                     customer_address.district = post_office_data.get('District', '')
+#                     customer_address.state = post_office_data.get('State', '')
+#                     customer_address.country = post_office_data.get('Country', '')
+
+#                     if not latitude or not longitude:
+#                         geo_params = {
+#                             "q": f"{pincode},{customer_address.district},{customer_address.state},{customer_address.country}",
+#                             "format": "json",
+#                             "limit": 1
+#                         }
+#                         geo_headers = {
+#                             "User-Agent": "MyDjangoApp/1.0 saralkumar.kapilit@gmail.com"
+#                         }
+#                         geo_response = requests.get(GEOLOCATION_API_URL, params=geo_params, headers=geo_headers)
+
+#                         if geo_response.status_code == 200:
+#                             geo_data = geo_response.json()
+#                             if geo_data:
+#                                 latitude = geo_data[0].get("lat", '')
+#                                 longitude = geo_data[0].get("lon", '')
+#                             else:
+#                                 return JsonResponse({"error": "Failed to fetch latitude and longitude for the provided address.", "status_code": 400}, status=400)
+#                         else:
+#                             return JsonResponse({"error": "Geolocation API request failed.", "status_code": geo_response.status_code}, status=geo_response.status_code)
+#             except Exception as e:
+#                 return JsonResponse({"error": f"Failed to fetch address details: {str(e)}", "status_code": 500}, status=500)
+
+#             customer_address.first_name = first_name
+#             customer_address.last_name = last_name
+#             customer_address.email = email
+#             customer_address.mobile_number = mobile_number
+#             customer_address.alternate_mobile = alternate_mobile
+#             customer_address.address_type = address_type
+#             customer_address.pincode = pincode
+#             customer_address.street = street
+#             customer_address.landmark = landmark
+#             customer_address.latitude = latitude
+#             customer_address.longitude = longitude
+
+#             customer_address.save(update_fields=[
+#                 "first_name", "last_name", "email", "mobile_number",
+#                 "alternate_mobile", "address_type", "pincode", "street",
+#                 "landmark", "village", "mandal", "postoffice", 
+#                 "district", "state", "country", "latitude", "longitude"
+#             ])
+
+#             return JsonResponse({
+#                 "message": "Customer address updated successfully.",
+#                 "status_code": 200,
+#                 "address_id": customer_address.id,
+#                 "pincode_details": {
+#                     "postoffice": customer_address.postoffice,
+#                     "village": customer_address.village,
+#                     "mandal": customer_address.mandal,
+#                     "district": customer_address.district,
+#                     "state": customer_address.state,
+#                     "country": customer_address.country,
+#                     "landmark": customer_address.landmark,
+#                     "latitude": customer_address.latitude,
+#                     "longitude": customer_address.longitude
+#                 }
+#             }, status=200)
+
+#         except json.JSONDecodeError:
+#             return JsonResponse({"error": "Invalid JSON format.", "status_code": 400}, status=400)
+#         except Exception as e:
+#             return JsonResponse({"error": f"An unexpected error occurred: {str(e)}", "status_code": 500}, status=500)
+
+#     return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
 GEOLOCATION_API_URL = "https://nominatim.openstreetmap.org/search"
 
 @csrf_exempt
@@ -1406,41 +1629,45 @@ def edit_customer_address(request):
                 customer_address = CustomerAddress.objects.get(id=address_id, customer_id=customer_id)
             except CustomerAddress.DoesNotExist:
                 return JsonResponse({"error": "Address not found.", "status_code": 404}, status=404)
+
+            # ------------------- PINCODE API -------------------
             try:
-                response = requests.get(f"https://api.postalpincode.in/pincode/{pincode}")
-                response_data = response.json()
-                if response_data[0]['Status'] == 'Success':
-                    post_office_data = response_data[0]['PostOffice'][0]
-                    customer_address.village = post_office_data.get('Name', '')
-                    customer_address.mandal = post_office_data.get('Block', '')
-                    customer_address.postoffice = post_office_data.get('Name', '')
-                    customer_address.district = post_office_data.get('District', '')
-                    customer_address.state = post_office_data.get('State', '')
-                    customer_address.country = post_office_data.get('Country', '')
-
-                    if not latitude or not longitude:
-                        geo_params = {
-                            "q": f"{pincode},{customer_address.district},{customer_address.state},{customer_address.country}",
-                            "format": "json",
-                            "limit": 1
-                        }
-                        geo_headers = {
-                            "User-Agent": "MyDjangoApp/1.0 saralkumar.kapilit@gmail.com"
-                        }
-                        geo_response = requests.get(GEOLOCATION_API_URL, params=geo_params, headers=geo_headers)
-
-                        if geo_response.status_code == 200:
-                            geo_data = geo_response.json()
-                            if geo_data:
-                                latitude = geo_data[0].get("lat", '')
-                                longitude = geo_data[0].get("lon", '')
-                            else:
-                                return JsonResponse({"error": "Failed to fetch latitude and longitude for the provided address.", "status_code": 400}, status=400)
-                        else:
-                            return JsonResponse({"error": "Geolocation API request failed.", "status_code": geo_response.status_code}, status=geo_response.status_code)
+                response = requests.get(f"https://api.postalpincode.in/pincode/{pincode}", timeout=5)
+                if response.status_code == 200:
+                    response_data = response.json()
+                    post_offices = response_data[0].get("PostOffice", [])
+                    if post_offices:
+                        office = post_offices[0]  # Take first post office
+                        customer_address.village = office.get("Name", "")
+                        customer_address.mandal = office.get("Block", "")
+                        customer_address.postoffice = office.get("BranchType", "")
+                        customer_address.district = office.get("District", "")
+                        customer_address.state = office.get("State", "")
+                        customer_address.country = office.get("Country", "India")
             except Exception as e:
-                return JsonResponse({"error": f"Failed to fetch address details: {str(e)}", "status_code": 500}, status=500)
+                print(f"[PINCODE API ERROR] {str(e)}")
 
+            # ------------------- GEOLOCATION API -------------------
+            if not latitude or not longitude:
+                try:
+                    geo_params = {
+                        "q": f"{pincode},{customer_address.district},{customer_address.state},{customer_address.country}",
+                        "format": "json",
+                        "limit": 1
+                    }
+                    geo_headers = {
+                        "User-Agent": "MyDjangoApp/1.0 saralkumar.kapilit@gmail.com"
+                    }
+                    geo_response = requests.get(GEOLOCATION_API_URL, params=geo_params, headers=geo_headers, timeout=5)
+                    if geo_response.status_code == 200:
+                        geo_data = geo_response.json()
+                        if geo_data:
+                            latitude = geo_data[0].get("lat", "")
+                            longitude = geo_data[0].get("lon", "")
+                except Exception as e:
+                    print(f"[GEOLOCATION ERROR] {str(e)}")
+
+            # ------------------- UPDATE FIELDS -------------------
             customer_address.first_name = first_name
             customer_address.last_name = last_name
             customer_address.email = email
@@ -3085,7 +3312,7 @@ def download_material_file(request, product_id):
 
         if not material_key:
             return JsonResponse({"error": "Material file not found.", "status_code": 404}, status=404)
-        
+
         s3 = boto3.client(
             's3',
             aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
@@ -3095,23 +3322,27 @@ def download_material_file(request, product_id):
 
         try:
             file_obj = s3.get_object(Bucket=settings.AWS_STORAGE_BUCKET_NAME, Key=material_key)
-            file_content = file_obj['Body'].read()
-            response = FileResponse(file_content, as_attachment=True)
-            response['Content-Disposition'] = f'attachment; filename="{material_key.replace("\\", "/").split("/")[-1]}"'
+            file_stream = file_obj['Body']
+            content_type = file_obj.get('ContentType', 'application/pdf')
 
-            response['Content-Type'] = file_obj['ContentType']
+            filename = material_key.replace("\\", "/").split("/")[-1]
+
+            response = StreamingHttpResponse(file_stream, content_type=content_type)
+            response['Content-Disposition'] = f'attachment; filename="{filename}"'
 
             return response
 
         except ClientError as e:
-            return JsonResponse({"error": f"Failed to fetch material file from S3: {str(e)}", "status_code": 500}, status=500)
-
+            return JsonResponse({
+                "error": f"Failed to fetch material file from S3: {str(e)}",
+                "status_code": 500
+            }, status=500)
 
     except ProductsDetails.DoesNotExist:
         return JsonResponse({"error": "Product not found.", "status_code": 404}, status=404)
+
     except Exception as e:
         return JsonResponse({"error": f"Unexpected error: {str(e)}", "status_code": 500}, status=500)
-
 
 @csrf_exempt
 def get_customer_profile(request):
@@ -4478,7 +4709,7 @@ def view_wishlist(request):
             if not customer_id:
                 return JsonResponse({"status": "error", "message": "Customer ID is required."})
             
-            wishlist_items = Wishlist.objects.filter(customer_id=customer_id).select_related("product")
+            wishlist_items = Wishlist.objects.filter(customer_id=customer_id).select_related("product", "product__category", "product__sub_category")
 
             if not wishlist_items.exists():
                 return JsonResponse({
@@ -4504,6 +4735,11 @@ def view_wishlist(request):
                     "final_price": round(float(product.price) - (float(product.price) * float(product.discount or 0) / 100), 2),
                     "availability": product.availability,
                     "product_image": product_image_url,
+                    "category_id": product.category.id if product.category else None,
+                    "category_name": product.category.category_name if product.category else "",
+                    "subcategory_id": product.sub_category.id if product.sub_category else None,
+                    "subcategory_name": product.sub_category.sub_category_name if product.sub_category else "",
+                    
                 })
             response_data = {
                 "status": "success",
@@ -4525,7 +4761,7 @@ def latest_products_current_year(request):
             data = json.loads(request.body.decode("utf-8"))
             customer_id = data.get("customer_id", None)
 
-            current_year = datetime.now().year
+            current_year = timezone.now().year
             products = ProductsDetails.objects.filter(
                 created_at__year=current_year
             ).order_by('-created_at')[:50]
@@ -4580,3 +4816,54 @@ def latest_products_current_year(request):
             return JsonResponse({"status": "error", "message": str(e)}, status=500)
 
     return JsonResponse({"status": "error", "message": "Only POST method allowed"}, status=405)
+def share_product_preview(request, product_id):
+    try:
+        product = ProductsDetails.objects.get(id=product_id)
+    except ProductsDetails.DoesNotExist:
+        raise Http404("Product not found")
+
+    product_images = product.product_images
+    if isinstance(product_images, list) and product_images:
+        product_image_url = f"{settings.AWS_S3_BUCKET_URL}/{product_images[0].replace('\\', '/')}"
+    elif isinstance(product_images, str):
+        product_image_url = f"{settings.AWS_S3_BUCKET_URL}/{product_images.replace('\\', '/')}"
+    else:
+        product_image_url = f"{request.scheme}://{request.get_host()}/static/images/default.jpg"
+
+    price = float(product.price or 0)
+    discount = float(product.discount or 0)
+    final_price = round(price - ((price * discount) / 100), 2)
+
+    product_url = f"{request.scheme}://{request.get_host()}/products/{product.product_name}/"
+
+    short_description = (product.description[:120] + "...") if product.description and len(product.description) > 120 else product.description or "Top quality product from Dronekits Store"
+
+    og_description = f"Take a look at {product.product_name}! Buy it now for just ₹{final_price}. Premium product from Dronekits Store, available now."
+
+    html = f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <title>{product.product_name} - Buy Now at Dronekits Store</title>
+        <meta property="og:title" content="{product.product_name} - Buy Now at Dronekits Store" />
+        <meta property="og:description" content="{og_description}" />
+        <meta property="og:image" content="{product_image_url}" />
+        <meta property="og:url" content="{product_url}" />
+        <meta property="og:type" content="product" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta http-equiv="refresh" content="2; url={product_url}" />
+    </head>
+    <body>
+        <p>Redirecting to product page...</p>
+        <script>
+            setTimeout(function () {{
+                window.location.href = "{product_url}";
+            }}, 2000);
+        </script>
+    </body>
+    </html>
+    """
+
+
+    return HttpResponse(html)
