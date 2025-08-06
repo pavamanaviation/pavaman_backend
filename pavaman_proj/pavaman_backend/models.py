@@ -189,7 +189,13 @@ class PaymentDetails(models.Model):
     product_order_id = models.CharField(default="")
     invoice_number = models.CharField(default="")
     invoice_date = models.DateTimeField(auto_now_add=True,null=True)
-    
+    payment_status = models.CharField(max_length=20, choices=[
+        ("created", "Created"),
+        ("pending", "Pending"),
+        ("captured", "Captured"),
+        ("failed", "Failed"),
+        ("cancelled", "Cancelled"),
+    ], default="created")
     def str(self):
         return f"Order {self.razorpay_order_id} - {self.payment_type} ({self.payment_mode})"
 
