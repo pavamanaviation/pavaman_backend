@@ -215,6 +215,50 @@ def send_verification_email(email, first_name, verification_link):
     email_message.attach_alternative(html_content, "text/html")
     email_message.send()
 
+# @csrf_exempt
+# def customer_login(request):
+#     if request.method == 'POST':
+#         try:
+#             data = json.loads(request.body)
+#             email = data.get('email')
+#             password = data.get('password')
+
+#             if not email or not password:
+#                 return JsonResponse({"error": "Email and Password are required.", "status_code": 400}, status=400)
+
+#             try:
+#                 customer = CustomerRegisterDetails.objects.get(email=email)
+#             except CustomerRegisterDetails.DoesNotExist:
+#                 return JsonResponse({"error": "Invalid email or password.", "status_code": 401}, status=401)
+            
+#             if customer.password is None:
+#                 return JsonResponse({"error": "You registered using Google Sign-In. Please reset your password.", "status_code": 401}, status=401)
+            
+#             if customer.account_status != 1:
+#                 return JsonResponse({"error": "Account is not activated. Please verify your email.", "status_code": 403}, status=403)
+
+#             if not check_password(password, customer.password):
+#                 return JsonResponse({"error": "Invalid email or password.", "status_code": 401}, status=401)
+
+#             request.session['customer_id'] = customer.id
+#             request.session['email'] = customer.email
+#             request.session.set_expiry(3600)
+
+#             return JsonResponse(
+#                 {"message": "Login successful.", 
+#                 "customer_id": customer.id,
+#                 "customer_name":customer.first_name + " " + customer.last_name,
+#                 "customer_email":customer.email, 
+#                 "status_code": 200}, status=200
+#             )
+
+#         except json.JSONDecodeError:
+#             return JsonResponse({"error": "Invalid JSON data.", "status_code": 400}, status=400)
+#         except Exception as e:
+#             return JsonResponse({"error": f"An unexpected error occurred: {str(e)}", "status_code": 500}, status=500)
+
+#     return JsonResponse({"error": "Invalid HTTP method. Only POST allowed.", "status_code": 405}, status=405)
+
 @csrf_exempt
 def customer_login(request):
     if request.method == 'POST':
@@ -223,17 +267,23 @@ def customer_login(request):
             email = data.get('email')
             password = data.get('password')
 
-            if not email or not password:
+            if not email and not password:
                 return JsonResponse({"error": "Email and Password are required.", "status_code": 400}, status=400)
+
+            if not email:
+                return JsonResponse({"error": "Please enter your email.", "status_code": 400}, status=400)
+
+            if not password:
+                return JsonResponse({"error": "Please enter your password.", "status_code": 400}, status=400)
 
             try:
                 customer = CustomerRegisterDetails.objects.get(email=email)
             except CustomerRegisterDetails.DoesNotExist:
                 return JsonResponse({"error": "Invalid email or password.", "status_code": 401}, status=401)
-            
+           
             if customer.password is None:
                 return JsonResponse({"error": "You registered using Google Sign-In. Please reset your password.", "status_code": 401}, status=401)
-            
+           
             if customer.account_status != 1:
                 return JsonResponse({"error": "Account is not activated. Please verify your email.", "status_code": 403}, status=403)
 
@@ -245,10 +295,10 @@ def customer_login(request):
             request.session.set_expiry(3600)
 
             return JsonResponse(
-                {"message": "Login successful.", 
+                {"message": "Login successful.",
                 "customer_id": customer.id,
                 "customer_name":customer.first_name + " " + customer.last_name,
-                "customer_email":customer.email, 
+                "customer_email":customer.email,
                 "status_code": 200}, status=200
             )
 
@@ -1360,31 +1410,38 @@ def add_customer_address(request):
         except CustomerRegisterDetails.DoesNotExist:
             return JsonResponse({"error": "Customer does not exist.", "status_code": 400}, status=400)
 
-        # Initialize
+        # Initialize location fields
         postoffice = mandal = village = district = state = country = ""
         latitude = longitude = None
 
-        # Get post office details from pincode API
+        # ✅ Corrected PINCODE API try block
         try:
-            response = requests.get(f"{PINCODE_API_URL}{pincode}", timeout=5)
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+            }
+            response = requests.get(f"{PINCODE_API_URL}{pincode}", headers=headers, timeout=5)
+            print(f"[PINCODE API RAW RESPONSE] {response.status_code} {response.text}")
+
             if response.status_code == 200:
                 pincode_data = response.json()
-                post_offices = pincode_data[0].get("PostOffice", [])
-                if post_offices:
-                    office = post_offices[0]
-                    postoffice = office.get("BranchType", "")
-                    village = office.get("Name", "")
-                    mandal = office.get("Block", "")
-                    district = office.get("District", "")
-                    state = office.get("State", "")
-                    country = office.get("Country", "India")
+                if pincode_data[0]["Status"] == "Success":
+                    post_offices = pincode_data[0].get("PostOffice", [])
+                    if post_offices:
+                        office = post_offices[0]
+                        postoffice = office.get("BranchType", "")
+                        village = office.get("Name", "")
+                        mandal = office.get("Block", "")
+                        district = office.get("District", "")
+                        state = office.get("State", "")
+                        country = office.get("Country", "India")
         except Exception as e:
             print(f"[PINCODE API ERROR] {str(e)}")
 
-        # Fetch latitude and longitude
+        # Geolocation API call
         try:
+            geo_query = ",".join(filter(None, [pincode, district, state, country]))
             geo_params = {
-                "q": f"{pincode},{district},{state},{country}",
+                "q": geo_query,
                 "format": "json",
                 "limit": 1
             }
@@ -1400,7 +1457,7 @@ def add_customer_address(request):
         except Exception as e:
             print(f"[GEOLOCATION ERROR] {str(e)}")
 
-        # Save address
+        # Save to DB
         customer_address = CustomerAddress.objects.create(
             customer=customer,
             first_name=first_name,
@@ -1444,7 +1501,6 @@ def add_customer_address(request):
     except Exception as e:
         return JsonResponse({"error": f"An unexpected error occurred: {str(e)}", "status_code": 500}, status=500)
 
-
 @csrf_exempt
 def view_customer_address(request):
     if request.method == "POST":
@@ -1456,8 +1512,15 @@ def view_customer_address(request):
                 return JsonResponse({"error": "Customer ID is required.", "status_code": 400}, status=400)
             addresses = CustomerAddress.objects.filter(customer_id=customer_id)
 
+            # if not addresses.exists():
+            #     return JsonResponse({"error": "No address found for the given customer ID.", "status_code": 404}, status=404)
+            
             if not addresses.exists():
-                return JsonResponse({"error": "No address found for the given customer ID.", "status_code": 404}, status=404)
+                return JsonResponse({
+                    "error": "No addresses found for this customer.",
+                    "status_code": 200,
+                    "addresses": []
+                }, status=200)
 
             address_list = []
             for address in addresses:
@@ -1605,111 +1668,126 @@ GEOLOCATION_API_URL = "https://nominatim.openstreetmap.org/search"
 
 @csrf_exempt
 def edit_customer_address(request):
-    if request.method == 'POST':
+    if request.method != 'POST':
+        return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
+
+    try:
+        data = json.loads(request.body.decode('utf-8'))
+        address_id = data.get("address_id")
+        customer_id = data.get("customer_id")
+        first_name = data.get("first_name")
+        last_name = data.get("last_name")
+        email = data.get("email")
+        mobile_number = data.get("mobile_number")
+        alternate_mobile = data.get("alternate_mobile", "")
+        address_type = data.get("address_type", "home")
+        pincode = data.get("pincode")
+        street = data.get("street")
+        landmark = data.get("landmark", "")
+        latitude = data.get("latitude")
+        longitude = data.get("longitude")
+
+        if not all([address_id, customer_id, first_name, last_name, email, mobile_number, pincode, street]):
+            return JsonResponse({"error": "All required fields must be provided.", "status_code": 400}, status=400)
+
         try:
-            data = json.loads(request.body.decode('utf-8'))
-            address_id = data.get("address_id")
-            customer_id = data.get("customer_id")
-            first_name = data.get("first_name")
-            last_name = data.get("last_name")
-            email = data.get("email")
-            mobile_number = data.get("mobile_number")
-            alternate_mobile = data.get("alternate_mobile", "")
-            address_type = data.get("address_type", "home")
-            pincode = data.get("pincode")
-            street = data.get("street")
-            landmark = data.get("landmark", "")
-            latitude = data.get("latitude")
-            longitude = data.get("longitude")
+            customer_address = CustomerAddress.objects.get(id=address_id, customer_id=customer_id)
+        except CustomerAddress.DoesNotExist:
+            return JsonResponse({"error": "Address not found.", "status_code": 404}, status=404)
 
-            if not all([address_id, customer_id, first_name, last_name, email, mobile_number, pincode, street]):
-                return JsonResponse({"error": "All required fields must be provided.", "status_code": 400}, status=400)
-
-            try:
-                customer_address = CustomerAddress.objects.get(id=address_id, customer_id=customer_id)
-            except CustomerAddress.DoesNotExist:
-                return JsonResponse({"error": "Address not found.", "status_code": 404}, status=404)
-
-            # ------------------- PINCODE API -------------------
-            try:
-                response = requests.get(f"https://api.postalpincode.in/pincode/{pincode}", timeout=5)
-                if response.status_code == 200:
-                    response_data = response.json()
-                    post_offices = response_data[0].get("PostOffice", [])
-                    if post_offices:
-                        office = post_offices[0]  # Take first post office
-                        customer_address.village = office.get("Name", "")
-                        customer_address.mandal = office.get("Block", "")
-                        customer_address.postoffice = office.get("BranchType", "")
-                        customer_address.district = office.get("District", "")
-                        customer_address.state = office.get("State", "")
-                        customer_address.country = office.get("Country", "India")
-            except Exception as e:
-                print(f"[PINCODE API ERROR] {str(e)}")
-
-            # ------------------- GEOLOCATION API -------------------
-            if not latitude or not longitude:
-                try:
-                    geo_params = {
-                        "q": f"{pincode},{customer_address.district},{customer_address.state},{customer_address.country}",
-                        "format": "json",
-                        "limit": 1
-                    }
-                    geo_headers = {
-                        "User-Agent": "MyDjangoApp/1.0 saralkumar.kapilit@gmail.com"
-                    }
-                    geo_response = requests.get(GEOLOCATION_API_URL, params=geo_params, headers=geo_headers, timeout=5)
-                    if geo_response.status_code == 200:
-                        geo_data = geo_response.json()
-                        if geo_data:
-                            latitude = geo_data[0].get("lat", "")
-                            longitude = geo_data[0].get("lon", "")
-                except Exception as e:
-                    print(f"[GEOLOCATION ERROR] {str(e)}")
-
-            # ------------------- UPDATE FIELDS -------------------
-            customer_address.first_name = first_name
-            customer_address.last_name = last_name
-            customer_address.email = email
-            customer_address.mobile_number = mobile_number
-            customer_address.alternate_mobile = alternate_mobile
-            customer_address.address_type = address_type
-            customer_address.pincode = pincode
-            customer_address.street = street
-            customer_address.landmark = landmark
-            customer_address.latitude = latitude
-            customer_address.longitude = longitude
-
-            customer_address.save(update_fields=[
-                "first_name", "last_name", "email", "mobile_number",
-                "alternate_mobile", "address_type", "pincode", "street",
-                "landmark", "village", "mandal", "postoffice", 
-                "district", "state", "country", "latitude", "longitude"
-            ])
-
-            return JsonResponse({
-                "message": "Customer address updated successfully.",
-                "status_code": 200,
-                "address_id": customer_address.id,
-                "pincode_details": {
-                    "postoffice": customer_address.postoffice,
-                    "village": customer_address.village,
-                    "mandal": customer_address.mandal,
-                    "district": customer_address.district,
-                    "state": customer_address.state,
-                    "country": customer_address.country,
-                    "landmark": customer_address.landmark,
-                    "latitude": customer_address.latitude,
-                    "longitude": customer_address.longitude
-                }
-            }, status=200)
-
-        except json.JSONDecodeError:
-            return JsonResponse({"error": "Invalid JSON format.", "status_code": 400}, status=400)
+        # ------------------- PINCODE API -------------------
+        postoffice = mandal = village = district = state = country = ""
+        try:
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+            }
+            response = requests.get(f"{PINCODE_API_URL}{pincode}", headers=headers, timeout=5)
+            print(f"[PINCODE API RAW RESPONSE] {response.status_code} {response.text}")
+            
+            # response = requests.get(f"https://api.postalpincode.in/pincode/{pincode}", timeout=5)
+            if response.status_code == 200:
+                response_data = response.json()
+                post_offices = response_data[0].get("PostOffice", [])
+                if post_offices:
+                    office = post_offices[0]
+                    village = office.get("Name", "")
+                    mandal = office.get("Block", "")
+                    postoffice = office.get("BranchType", "")
+                    district = office.get("District", "")
+                    state = office.get("State", "")
+                    country = office.get("Country", "India")
         except Exception as e:
-            return JsonResponse({"error": f"An unexpected error occurred: {str(e)}", "status_code": 500}, status=500)
+            print(f"[PINCODE API ERROR] {str(e)}")
 
-    return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
+        # ------------------- GEOLOCATION API -------------------
+        if not latitude or not longitude:
+            try:
+                query_parts = [pincode, district, state, country]
+                query_string = ','.join([q for q in query_parts if q]) or pincode
+                geo_params = {
+                    "q": query_string,
+                    "format": "json",
+                    "limit": 1
+                }
+                geo_headers = {
+                    "User-Agent": "MyDjangoApp/1.0 saralkumar.kapilit@gmail.com"
+                }
+                geo_response = requests.get(GEOLOCATION_API_URL, params=geo_params, headers=geo_headers, timeout=5)
+                if geo_response.status_code == 200:
+                    geo_data = geo_response.json()
+                    if geo_data:
+                        latitude = geo_data[0].get("lat")
+                        longitude = geo_data[0].get("lon")
+            except Exception as e:
+                print(f"[GEOLOCATION ERROR] {str(e)}")
+
+        # ------------------- UPDATE FIELDS -------------------
+        customer_address.first_name = first_name
+        customer_address.last_name = last_name
+        customer_address.email = email
+        customer_address.mobile_number = mobile_number
+        customer_address.alternate_mobile = alternate_mobile
+        customer_address.address_type = address_type
+        customer_address.pincode = pincode
+        customer_address.street = street
+        customer_address.landmark = landmark
+        customer_address.village = village
+        customer_address.mandal = mandal
+        customer_address.postoffice = postoffice
+        customer_address.district = district
+        customer_address.state = state
+        customer_address.country = country
+        customer_address.latitude = latitude
+        customer_address.longitude = longitude
+
+        customer_address.save(update_fields=[
+            "first_name", "last_name", "email", "mobile_number",
+            "alternate_mobile", "address_type", "pincode", "street",
+            "landmark", "village", "mandal", "postoffice",
+            "district", "state", "country", "latitude", "longitude"
+        ])
+
+        return JsonResponse({
+            "message": "Customer address updated successfully.",
+            "status_code": 200,
+            "address_id": customer_address.id,
+            "pincode_details": {
+                "postoffice": postoffice,
+                "village": village,
+                "mandal": mandal,
+                "district": district,
+                "state": state,
+                "country": country,
+                "landmark": landmark,
+                "latitude": latitude,
+                "longitude": longitude
+            }
+        }, status=200)
+
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON format.", "status_code": 400}, status=400)
+    except Exception as e:
+        return JsonResponse({"error": f"An unexpected error occurred: {str(e)}", "status_code": 500}, status=500)
 
 @csrf_exempt
 def delete_customer_address(request):
@@ -2260,6 +2338,7 @@ def razorpay_callback(request):
             return JsonResponse({"error": "Signature verification failed.", "razorpay_order_id": razorpay_order_id, "status_code": 400}, status=400)
     except Exception as e:
         return JsonResponse({"error": str(e), "status_code": 500}, status=500)
+    
 def send_html_order_confirmation(to_email, customer_name, product_list, total_amount, order_id, transaction_id):
     subject = "[Pavaman] Order Confirmation - Payment Received"
     logo_url = f"{settings.AWS_S3_BUCKET_URL}/static/images/aviation-logo.png"
@@ -4816,6 +4895,8 @@ def latest_products_current_year(request):
             return JsonResponse({"status": "error", "message": str(e)}, status=500)
 
     return JsonResponse({"status": "error", "message": "Only POST method allowed"}, status=405)
+
+@csrf_exempt
 def share_product_preview(request, product_id):
     try:
         product = ProductsDetails.objects.get(id=product_id)

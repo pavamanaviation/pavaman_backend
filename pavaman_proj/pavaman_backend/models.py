@@ -135,6 +135,13 @@ class CustomerAddress(models.Model):
         return f"{self.first_name} {self.last_name} - {self.address_type} ({self.pincode})"
     
 class OrderProducts(models.Model):
+    ORDER_STATUS_CHOICES = [
+    ("Pending", "Pending"),
+    ("Paid", "Paid"),
+    ("Failed", "Failed"),
+    ("Cancelled", "Cancelled"),
+    ("Refunded", "Refunded"),
+    ]
     customer = models.ForeignKey(CustomerRegisterDetails, on_delete=models.CASCADE)
     product = models.ForeignKey(ProductsDetails, on_delete=models.CASCADE)
     category = models.CharField(max_length=255)
@@ -142,7 +149,7 @@ class OrderProducts(models.Model):
     quantity = models.IntegerField()
     price = models.DecimalField(max_digits=10, decimal_places=2)
     final_price = models.DecimalField(max_digits=10, decimal_places=2)
-    order_status = models.CharField(max_length=50, default='Pending')
+    order_status = models.CharField(max_length=50,choices=ORDER_STATUS_CHOICES, default='Pending')
     admin = models.ForeignKey(PavamanAdminDetails, on_delete=models.CASCADE)
     shipping_status= models.CharField(default="")
     delivery_status = models.CharField(default="")
