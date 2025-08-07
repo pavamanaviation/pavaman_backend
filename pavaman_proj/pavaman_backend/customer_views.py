@@ -2485,7 +2485,7 @@ def razorpay_webhook(request):
     try:
         payload = request.body
         received_signature = request.META.get("HTTP_X_RAZORPAY_SIGNATURE")
-        webhook_secret = "dronekits@pavaman@24/07/2025"  # ✅ Your actual webhook secret
+        webhook_secret = settings.RAZORPAY_WEBHOOK_SECRET
         generated_signature = hmac.new(
             webhook_secret.encode('utf-8'),
             msg=payload,
@@ -3374,6 +3374,7 @@ def get_payment_details_by_order(request):
                     "product_name":product.product_name,
                     "shipping_status":order.shipping_status,
                     "delivery_status":order.delivery_status,
+                    "payment_status": get_display_payment_status(payment.payment_status),
                     
                 })
 
@@ -3545,7 +3546,9 @@ def filter_my_order(request):
                 "time_filters": year_options,
                 "product_order_id": payment.product_order_id,
                 "customer_address": address_data,
-                "order_products": order_product_list
+                "order_products": order_product_list,
+                "payment_status": get_display_payment_status(payment.payment_status),
+
             })
 
         if (delivery_status_filter or shipping_status_filter) and total_matched_order_products == 0:
@@ -3567,6 +3570,7 @@ def filter_my_order(request):
 
     except Exception as e:
         return JsonResponse({"error": str(e), "status_code": 500}, status=500)
+
 
 @csrf_exempt
 def customer_get_payment_details_by_order(request):
@@ -3621,7 +3625,9 @@ def customer_get_payment_details_by_order(request):
                     "product_id": order.product_id,
                     "product_image": product_image_url,
                     "product_name": product.product_name,
-                    "delivery_charge":order.delivery_charge
+                    "delivery_charge":order.delivery_charge,
+                    "payment_status": get_display_payment_status(payment.payment_status),
+
                 })
 
             if action == 'search' and not order_product_list:
@@ -3674,6 +3680,18 @@ def customer_get_payment_details_by_order(request):
 
     except Exception as e:
         return JsonResponse({"error": str(e), "status_code": 500}, status=500)
+
+def get_display_payment_status(status):
+    status = (status or '').lower()
+    return {
+        "created": "Waiting for Payment",
+        "authorized": "Payment Authorized (Processing)",
+        "captured": "Payment Successful",
+        "failed": "Payment Failed",
+        "pending": "Awaiting Bank Confirmation",
+        "refunded": "Refunded to Your Account",
+        "cancelled": "Payment Cancelled",
+    }.get(status, "Status Unknown")
 
 def download_material_file(request, product_id):
     try:
@@ -4761,8 +4779,8 @@ def submit_feedback_rating(request):
                 order_product=order_product,
                 order_id=product_order_id,
                 product=product,
-                category=product.category.category_name if product.category else "",
-                sub_category=product.sub_category.sub_category_name if product.sub_category else "",
+                category=product.category if product.category else "",
+                sub_category=product.sub_category if product.sub_category else "",
                 rating=rating if rating else None,
                 feedback=feedback,
                 created_at=current_time
@@ -4794,97 +4812,97 @@ def submit_feedback_rating(request):
         }, status=405)
 
 
-@csrf_exempt
-def submit_feedback_rating(request):
-    if request.method == "POST":
-        try:
-            data = json.loads(request.body.decode("utf-8"))
+# @csrf_exempt
+# def submit_feedback_rating(request):
+#     if request.method == "POST":
+#         try:
+#             data = json.loads(request.body.decode("utf-8"))
 
-            customer_id = data.get('customer_id')
-            product_id = data.get('product_id')
-            product_order_id = data.get('product_order_id')
-            rating = data.get('rating')
-            feedback = data.get('feedback', "")
-            if not all([customer_id, product_id, product_order_id]):
-                return JsonResponse({
-                    "error": "customer_id, product_id, and product_order_id are required.",
-                    "status_code": 400
-                }, status=400)
+#             customer_id = data.get('customer_id')
+#             product_id = data.get('product_id')
+#             product_order_id = data.get('product_order_id')
+#             rating = data.get('rating')
+#             feedback = data.get('feedback', "")
+#             if not all([customer_id, product_id, product_order_id]):
+#                 return JsonResponse({
+#                     "error": "customer_id, product_id, and product_order_id are required.",
+#                     "status_code": 400
+#                 }, status=400)
 
-            try:
-                customer = CustomerRegisterDetails.objects.get(id=customer_id)
-                product = ProductsDetails.objects.get(id=product_id)
-                admin = product.admin
-                payment = PaymentDetails.objects.filter(
-                    customer=customer, product_order_id=product_order_id
-                ).first()
-                if not payment:
-                    return JsonResponse({
-                        "error": "Payment not found for given product_order_id.",
-                        "status_code": 404
-                    }, status=404)
-                order_product = OrderProducts.objects.filter(
-                    id__in=payment.order_product_ids,
-                    product=product,
-                    customer=customer
-                ).first()
-                if not order_product:
-                    return JsonResponse({
-                        "error": "Matching order product not found.",
-                        "status_code": 404
-                    }, status=404)
+#             try:
+#                 customer = CustomerRegisterDetails.objects.get(id=customer_id)
+#                 product = ProductsDetails.objects.get(id=product_id)
+#                 admin = product.admin
+#                 payment = PaymentDetails.objects.filter(
+#                     customer=customer, product_order_id=product_order_id
+#                 ).first()
+#                 if not payment:
+#                     return JsonResponse({
+#                         "error": "Payment not found for given product_order_id.",
+#                         "status_code": 404
+#                     }, status=404)
+#                 order_product = OrderProducts.objects.filter(
+#                     id__in=payment.order_product_ids,
+#                     product=product,
+#                     customer=customer
+#                 ).first()
+#                 if not order_product:
+#                     return JsonResponse({
+#                         "error": "Matching order product not found.",
+#                         "status_code": 404
+#                     }, status=404)
 
-            except Exception as e:
-                return JsonResponse({
-                    "error": f"Related object fetch error: {str(e)}",
-                    "status_code": 404
-                }, status=404)
-            existing_feedback = FeedbackRating.objects.filter(
-                customer=customer, product=product, order_product=order_product
-            ).first()
-            if existing_feedback:
-                return JsonResponse({
-                    "error": "Feedback already submitted for this product and order.",
-                    "status_code": 400
-                }, status=400)
-            current_time = datetime.utcnow() + timedelta(hours=5, minutes=30)
-            FeedbackRating.objects.create(
-                admin=admin,
-                customer=customer,
-                payment=payment,
-                order_product=order_product,
-                order_id=product_order_id,
-                product=product,
-                category=product.category.category_name if product.category else "",
-                sub_category=product.sub_category.sub_category_name if product.sub_category else "",
-                rating=rating if rating else None,
-                feedback=feedback,
-                created_at=current_time
-            )
-            return JsonResponse({
-                "message": "Feedback submitted successfully.",
-                "status_code": 201,
-                "customer_id":customer_id,
-                "submitted_at": current_time
-            }, status=201)
+#             except Exception as e:
+#                 return JsonResponse({
+#                     "error": f"Related object fetch error: {str(e)}",
+#                     "status_code": 404
+#                 }, status=404)
+#             existing_feedback = FeedbackRating.objects.filter(
+#                 customer=customer, product=product, order_product=order_product
+#             ).first()
+#             if existing_feedback:
+#                 return JsonResponse({
+#                     "error": "Feedback already submitted for this product and order.",
+#                     "status_code": 400
+#                 }, status=400)
+#             current_time = datetime.utcnow() + timedelta(hours=5, minutes=30)
+#             FeedbackRating.objects.create(
+#                 admin=admin,
+#                 customer=customer,
+#                 payment=payment,
+#                 order_product=order_product,
+#                 order_id=product_order_id,
+#                 product=product,
+#                 category=product.category.category_name if product.category else "",
+#                 sub_category=product.sub_category.sub_category_name if product.sub_category else "",
+#                 rating=rating if rating else None,
+#                 feedback=feedback,
+#                 created_at=current_time
+#             )
+#             return JsonResponse({
+#                 "message": "Feedback submitted successfully.",
+#                 "status_code": 201,
+#                 "customer_id":customer_id,
+#                 "submitted_at": current_time
+#             }, status=201)
 
-        except json.JSONDecodeError:
-            return JsonResponse({
-                "error": "Invalid JSON format.",
-                "status_code": 400
-            }, status=400)
+#         except json.JSONDecodeError:
+#             return JsonResponse({
+#                 "error": "Invalid JSON format.",
+#                 "status_code": 400
+#             }, status=400)
 
-        except Exception as e:
-            return JsonResponse({
-                "error": f"Server error: {str(e)}",
-                "status_code": 500
-            }, status=500)
+#         except Exception as e:
+#             return JsonResponse({
+#                 "error": f"Server error: {str(e)}",
+#                 "status_code": 500
+#             }, status=500)
 
-    else:
-        return JsonResponse({
-            "error": "Invalid HTTP method. Only POST allowed.",
-            "status_code": 405
-        }, status=405)
+#     else:
+#         return JsonResponse({
+#             "error": "Invalid HTTP method. Only POST allowed.",
+#             "status_code": 405
+#         }, status=405)
 
 @csrf_exempt
 def edit_feedback_rating(request):

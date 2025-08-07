@@ -895,8 +895,8 @@ def add_product(request):
                 except ClientError as e:
                     return JsonResponse({"error": f"Failed to upload product image: {str(e)}", "status_code": 500}, status=500)
                 product_images.append(s3_key)
-            if 'material_file' not in request.FILES:
-                return JsonResponse({"error": "Material file is required.", "status_code": 400}, status=400)
+            # if 'material_file' not in request.FILES:
+            #     return JsonResponse({"error": "Material file is required.", "status_code": 400}, status=400)
             material_file = request.FILES['material_file']
             allowed_material_extensions = ['pdf', 'doc']
             file_extension = material_file.name.split('.')[-1].lower()
