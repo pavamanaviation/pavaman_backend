@@ -40,7 +40,6 @@ def send_order_confirmation_sms(mobile_number, order_id, amount):
     }
 
     response = requests.post(settings.MSG91_SMS_URL, json=payload, headers=headers)
-    print("MSG91 Response:", response.status_code, response.text)
     return response.json()
 
 

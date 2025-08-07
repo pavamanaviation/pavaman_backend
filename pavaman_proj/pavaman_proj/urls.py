@@ -143,6 +143,6 @@ urlpatterns = [
     path('latest-products', latest_products_current_year, name='latest_products_current_year'),
     path('view-products-by-category-and-subcategory',view_products_by_category_and_subcategory,name='view_products_by_category_and_subcategory'),
     path('share-preview/<int:product_id>/',share_product_preview,name='share_product_preview'),
-    path('razorpay-webhook', razorpay_webhook, name='razorpay_webhook'),
+    path('razorpay-webhook/', razorpay_webhook, name='razorpay_webhook'),
 
 ]+ static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

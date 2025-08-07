@@ -189,8 +189,6 @@ class PaymentDetails(models.Model):
     product_order_id = models.CharField(default="")
     invoice_number = models.CharField(default="")
     invoice_date = models.DateTimeField(auto_now_add=True,null=True)
-    order_status= models.CharField(default="")
-    Delivery_status = models.CharField(default="")
     payment_status = models.CharField(max_length=20, choices=[
         ("created", "Created"),
         ("pending", "Pending"),

@@ -31,7 +31,12 @@ from .models import (
 )
 import threading
 from .msg91 import send_bulk_sms,send_verify_mobile,send_order_confirmation_sms
-
+import requests
+import hmac
+import hashlib
+from razorpay import Client
+import traceback
+from django.db import transaction
 
 def is_valid_password(password):
     if len(password) < 8:
@@ -156,11 +161,11 @@ def verify_email(request, verification_link):
         }, status=400)
     
 def send_verification_email(email, first_name, verification_link):
-    subject = "[Pavaman] Please Verify Your Email"
+    subject = "[Dronekits.in] Please Verify Your Email"
 
     frontend_url =  settings.FRONTEND_URL
     full_link = f"{frontend_url}/verify-email/{verification_link}"
-    logo_url = f"{settings.AWS_S3_BUCKET_URL}/static/images/aviation-logo.png"
+    logo_url = f"{settings.AWS_S3_BUCKET_URL}/static/images/drk_mail_logo.png"
 
     text_content = f"""
     Hello {first_name},
@@ -185,14 +190,14 @@ def send_verification_email(email, first_name, verification_link):
     <body style="margin: 0; padding: 0; font-family: 'Inter', sans-serif; background-color: #f5f5f5;">
         <div class="container" style="margin: 40px auto; background-color: #ffffff; border-radius: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); padding: 40px 30px; max-width: 480px; text-align: left;">
                 <div style="text-align: center;">
-                <img src="{logo_url}" alt="Pavaman Logo" class="logo" style="max-width: 280px; height: auto; margin-bottom: 20px;" />
+                <img src="{logo_url}" alt="Dronekits Logo" class="logo" style="max-width: 280px; height: auto; margin-bottom: 20px;" />
                 <h2 style="margin-top: 0; color: #222;">Please verify your email</h2>
             </div>
             <div style="margin-bottom: 10px; color: #555; font-size: 14px;">
                 Hello {first_name},
             </div>
             <p style="color: #555; margin: 20px 0 30px; font-size:14px">
-                To use <strong>Pavaman</strong>, click the verification button. This helps keep your account secure.
+                To use <strong>Dronekits.in</strong>, click the verification button. This helps keep your account secure.
             </p>
             <div style="text-align: center;">
                 <a href="{full_link}" style="display: inline-block; padding: 14px 28px; background-color: #4450A2; color: #ffffff; font-weight: 600; border-radius: 8px; text-decoration: none; font-size: 16px;">
@@ -201,7 +206,7 @@ def send_verification_email(email, first_name, verification_link):
             </div>
             <p style="color: #888; font-size: 14px; margin-top: 20px;">
                 If you didn't request this, you can safely ignore this email.<br/>
-                You're receiving this because you have an account on Pavaman.
+                You're receiving this because you have an account on Dronekits.in.
             </p>
             <p style="margin-top: 30px; font-size: 14px; color: #888;">This is an automated email. Please do not reply.</p>
         </div>
@@ -214,50 +219,6 @@ def send_verification_email(email, first_name, verification_link):
     )
     email_message.attach_alternative(html_content, "text/html")
     email_message.send()
-
-# @csrf_exempt
-# def customer_login(request):
-#     if request.method == 'POST':
-#         try:
-#             data = json.loads(request.body)
-#             email = data.get('email')
-#             password = data.get('password')
-
-#             if not email or not password:
-#                 return JsonResponse({"error": "Email and Password are required.", "status_code": 400}, status=400)
-
-#             try:
-#                 customer = CustomerRegisterDetails.objects.get(email=email)
-#             except CustomerRegisterDetails.DoesNotExist:
-#                 return JsonResponse({"error": "Invalid email or password.", "status_code": 401}, status=401)
-            
-#             if customer.password is None:
-#                 return JsonResponse({"error": "You registered using Google Sign-In. Please reset your password.", "status_code": 401}, status=401)
-            
-#             if customer.account_status != 1:
-#                 return JsonResponse({"error": "Account is not activated. Please verify your email.", "status_code": 403}, status=403)
-
-#             if not check_password(password, customer.password):
-#                 return JsonResponse({"error": "Invalid email or password.", "status_code": 401}, status=401)
-
-#             request.session['customer_id'] = customer.id
-#             request.session['email'] = customer.email
-#             request.session.set_expiry(3600)
-
-#             return JsonResponse(
-#                 {"message": "Login successful.", 
-#                 "customer_id": customer.id,
-#                 "customer_name":customer.first_name + " " + customer.last_name,
-#                 "customer_email":customer.email, 
-#                 "status_code": 200}, status=200
-#             )
-
-#         except json.JSONDecodeError:
-#             return JsonResponse({"error": "Invalid JSON data.", "status_code": 400}, status=400)
-#         except Exception as e:
-#             return JsonResponse({"error": f"An unexpected error occurred: {str(e)}", "status_code": 500}, status=500)
-
-#     return JsonResponse({"error": "Invalid HTTP method. Only POST allowed.", "status_code": 405}, status=405)
 
 @csrf_exempt
 def customer_login(request):
@@ -462,9 +423,8 @@ def delete_otp_after_delay(customer_id):
             customer.otp = None
             customer.reset_link = None
             customer.save()
-            print(f"OTP for {customer_id} deleted after 2 minutes ")
     except Exception as e:
-        print(f"Error deleting OTP: {e}")
+        return JsonResponse({"error": f"Error deleting OTP: {str(e)}"}, status=500)
 @csrf_exempt
 def otp_generate(request):
     if request.method == "POST":
@@ -519,8 +479,8 @@ def send_password_reset_otp_email(customer):
     email = customer.email
     first_name = customer.first_name or 'Customer'
     reset_token = customer.reset_link
-    logo_url = f"{settings.AWS_S3_BUCKET_URL}/static/images/aviation-logo.png"
-    subject = "[Pavaman] Your OTP for Password Reset"
+    logo_url = f"{settings.AWS_S3_BUCKET_URL}/static/images/drk_mail_logo.png"
+    subject = "[Dronekits.in] Your OTP for Password Reset"
     text_content = f"Hello {first_name},\n\nYour OTP for password reset is: {otp}"
     html_content = f"""
     <html>
@@ -546,7 +506,7 @@ def send_password_reset_otp_email(customer):
     <body style="margin: 0; padding: 0; font-family: 'Inter', sans-serif; background-color: #f5f5f5;">
         <div class="container" style="margin: 40px auto; background-color: #ffffff; border-radius: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); padding: 40px 30px; max-width: 480px; text-align: left;">
             <div style="text-align: center;">
-            <img src="{logo_url}" alt="Pavaman Logo" class="logo" style="max-width: 280px; height: auto; margin-bottom: 20px;" />
+            <img src="{logo_url}" alt="Dronekits Logo" class="logo" style="max-width: 280px; height: auto; margin-bottom: 20px;" />
             <h2 style="margin-top: 0; color: #222;">Your OTP for Password Reset</h2>
             </div>
 
@@ -564,7 +524,7 @@ def send_password_reset_otp_email(customer):
 
             <p style="color: #888; font-size: 14px; margin-top: 20px;">
                 If you didn't request this, you can safely ignore this email.<br/>
-                You're receiving this because you have an account on Pavaman.
+                You're receiving this because you have an account on Dronekits.in.
             </p>
             <p style="margin-top: 30px; font-size: 14px; color: #888;">This is an automated email. Please do not reply.</p>
         </div>
@@ -1267,120 +1227,6 @@ def delete_selected_products_cart(request):
 
     return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
 
-# PINCODE_API_URL = "https://api.postalpincode.in/pincode/"
-# GEOLOCATION_API_URL = "https://nominatim.openstreetmap.org/search"
-# @csrf_exempt
-# def add_customer_address(request):
-#     if request.method == 'POST':
-#         try:
-#             data = json.loads(request.body.decode('utf-8'))
-#             customer_id = data.get("customer_id")
-#             first_name = data.get("first_name")
-#             last_name = data.get("last_name")
-#             email = data.get("email")
-#             mobile_number = data.get("mobile_number")
-#             alternate_mobile = data.get("alternate_mobile", "")
-#             address_type = data.get("address_type", "home")
-#             pincode = data.get("pincode")
-#             street = data.get("street")
-#             landmark = data.get("landmark", "")
-
-#             if not all([customer_id, first_name, last_name, email, mobile_number, pincode, street]):
-#                 return JsonResponse({"error": "All required fields must be provided.", "status_code": 400}, status=400)
-
-#             try:
-#                 customer = CustomerRegisterDetails.objects.get(id=customer_id)
-#             except CustomerRegisterDetails.DoesNotExist:
-#                 return JsonResponse({"error": "Customer does not exist.", "status_code": 400}, status=400)
-
-#             postoffice = mandal = village = district = state = country = ""
-#             latitude = longitude = None
-
-#             response = requests.get(f"{PINCODE_API_URL}{pincode}")
-#             if response.status_code == 200:
-#                 pincode_data = response.json()
-#                 if pincode_data and pincode_data[0].get("Status") == "Success":
-#                     post_office_data = pincode_data[0].get("PostOffice", [])[0] if pincode_data[0].get("PostOffice") else {}
-
-#                     postoffice = post_office_data.get("BranchType", "")
-#                     village = post_office_data.get("Name", "")
-#                     mandal = post_office_data.get("Block", "")
-#                     district = post_office_data.get("District", "")
-#                     state = post_office_data.get("State", "")
-#                     country = post_office_data.get("Country", "India")
-
-#             geo_params = {
-#                 "q": f"{pincode},{district},{state},{country}",
-#                 "format": "json",
-#                 "limit": 1
-#             }
-
-#             geo_headers = {
-#                 "User-Agent": "MyDjangoApp/1.0 saralkumar.kapilit@gmail.com"
-#             }
-
-#             geo_response = requests.get(GEOLOCATION_API_URL, params=geo_params, headers=geo_headers)
-
-#             if geo_response.status_code == 200:
-#                 geo_data = geo_response.json()
-#                 if geo_data:
-#                     latitude = geo_data[0].get("lat")
-#                     longitude = geo_data[0].get("lon")
-#                 else:
-#                     return JsonResponse({"error": "Failed to fetch latitude and longitude for the provided address.", "status_code": 400}, status=400)
-#             else:
-#                 return JsonResponse({"error": "Geolocation API request failed.", "status_code": geo_response.status_code}, status=geo_response.status_code)
-
-#             customer_address = CustomerAddress.objects.create(
-#                 customer=customer,
-#                 first_name=first_name,
-#                 last_name=last_name,
-#                 email=email,
-#                 mobile_number=mobile_number,
-#                 alternate_mobile=alternate_mobile,
-#                 address_type=address_type,
-#                 pincode=pincode,
-#                 street=street,
-#                 landmark=landmark,
-#                 village=village,
-#                 mandal=mandal,
-#                 postoffice=postoffice,
-#                 district=district,
-#                 state=state,
-#                 country=country,
-#                 latitude=latitude,
-#                 longitude=longitude
-#             )
-
-#             return JsonResponse({
-#                 "message": "Customer address added successfully.",
-#                 "status_code": 200,
-#                 "address_id": customer_address.id,
-#                 "pincode_details": {
-#                     "postoffice": postoffice,
-#                     "village": village,
-#                     "mandal": mandal,
-#                     "district": district,
-#                     "state": state,
-#                     "country": country,
-#                     "landmark": landmark,
-#                     "latitude": latitude,
-#                     "longitude": longitude
-#                 }
-#             }, status=200)
-
-#         except json.JSONDecodeError:
-#             return JsonResponse({"error": "Invalid JSON format.", "status_code": 400}, status=400)
-#         except Exception as e:
-#             return JsonResponse({"error": f"An unexpected error occurred: {str(e)}", "status_code": 500}, status=500)
-
-#     return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
-from django.views.decorators.csrf import csrf_exempt
-from django.http import JsonResponse
-from .models import CustomerRegisterDetails, CustomerAddress
-import json
-import requests
-
 PINCODE_API_URL = "https://api.postalpincode.in/pincode/"
 GEOLOCATION_API_URL = "https://nominatim.openstreetmap.org/search"
 
@@ -1410,17 +1256,14 @@ def add_customer_address(request):
         except CustomerRegisterDetails.DoesNotExist:
             return JsonResponse({"error": "Customer does not exist.", "status_code": 400}, status=400)
 
-        # Initialize location fields
         postoffice = mandal = village = district = state = country = ""
         latitude = longitude = None
 
-        # ✅ Corrected PINCODE API try block
         try:
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
             }
             response = requests.get(f"{PINCODE_API_URL}{pincode}", headers=headers, timeout=5)
-            print(f"[PINCODE API RAW RESPONSE] {response.status_code} {response.text}")
 
             if response.status_code == 200:
                 pincode_data = response.json()
@@ -1435,9 +1278,7 @@ def add_customer_address(request):
                         state = office.get("State", "")
                         country = office.get("Country", "India")
         except Exception as e:
-            print(f"[PINCODE API ERROR] {str(e)}")
-
-        # Geolocation API call
+            return JsonResponse({"error": "Failed to fetch pincode details.", "status_code": 400}, status=400)
         try:
             geo_query = ",".join(filter(None, [pincode, district, state, country]))
             geo_params = {
@@ -1455,9 +1296,7 @@ def add_customer_address(request):
                     latitude = geo_data[0].get("lat")
                     longitude = geo_data[0].get("lon")
         except Exception as e:
-            print(f"[GEOLOCATION ERROR] {str(e)}")
-
-        # Save to DB
+            return JsonResponse({"error": "Failed to fetch latitude and longitude for the provided address.", "status_code": 400}, status=400)
         customer_address = CustomerAddress.objects.create(
             customer=customer,
             first_name=first_name,
@@ -1512,8 +1351,8 @@ def view_customer_address(request):
                 return JsonResponse({"error": "Customer ID is required.", "status_code": 400}, status=400)
             addresses = CustomerAddress.objects.filter(customer_id=customer_id)
 
-            # if not addresses.exists():
-            #     return JsonResponse({"error": "No address found for the given customer ID.", "status_code": 404}, status=404)
+            if not addresses.exists():
+                return JsonResponse({"error": "No address found for the given customer ID.", "status_code": 404}, status=404)
             
             if not addresses.exists():
                 return JsonResponse({
@@ -1558,112 +1397,6 @@ def view_customer_address(request):
 
     return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
 
-
-# GEOLOCATION_API_URL = "https://nominatim.openstreetmap.org/search"
-
-# @csrf_exempt
-# def edit_customer_address(request):
-#     if request.method == 'POST':
-#         try:
-#             data = json.loads(request.body.decode('utf-8'))
-#             address_id = data.get("address_id")
-#             customer_id = data.get("customer_id")
-#             first_name = data.get("first_name")
-#             last_name = data.get("last_name")
-#             email = data.get("email")
-#             mobile_number = data.get("mobile_number")
-#             alternate_mobile = data.get("alternate_mobile", "")
-#             address_type = data.get("address_type", "home")
-#             pincode = data.get("pincode")
-#             street = data.get("street")
-#             landmark = data.get("landmark", "")
-#             latitude = data.get("latitude")
-#             longitude = data.get("longitude")
-
-#             if not all([address_id, customer_id, first_name, last_name, email, mobile_number, pincode, street]):
-#                 return JsonResponse({"error": "All required fields must be provided.", "status_code": 400}, status=400)
-
-#             try:
-#                 customer_address = CustomerAddress.objects.get(id=address_id, customer_id=customer_id)
-#             except CustomerAddress.DoesNotExist:
-#                 return JsonResponse({"error": "Address not found.", "status_code": 404}, status=404)
-#             try:
-#                 response = requests.get(f"https://api.postalpincode.in/pincode/{pincode}")
-#                 response_data = response.json()
-#                 if response_data[0]['Status'] == 'Success':
-#                     post_office_data = response_data[0]['PostOffice'][0]
-#                     customer_address.village = post_office_data.get('Name', '')
-#                     customer_address.mandal = post_office_data.get('Block', '')
-#                     customer_address.postoffice = post_office_data.get('Name', '')
-#                     customer_address.district = post_office_data.get('District', '')
-#                     customer_address.state = post_office_data.get('State', '')
-#                     customer_address.country = post_office_data.get('Country', '')
-
-#                     if not latitude or not longitude:
-#                         geo_params = {
-#                             "q": f"{pincode},{customer_address.district},{customer_address.state},{customer_address.country}",
-#                             "format": "json",
-#                             "limit": 1
-#                         }
-#                         geo_headers = {
-#                             "User-Agent": "MyDjangoApp/1.0 saralkumar.kapilit@gmail.com"
-#                         }
-#                         geo_response = requests.get(GEOLOCATION_API_URL, params=geo_params, headers=geo_headers)
-
-#                         if geo_response.status_code == 200:
-#                             geo_data = geo_response.json()
-#                             if geo_data:
-#                                 latitude = geo_data[0].get("lat", '')
-#                                 longitude = geo_data[0].get("lon", '')
-#                             else:
-#                                 return JsonResponse({"error": "Failed to fetch latitude and longitude for the provided address.", "status_code": 400}, status=400)
-#                         else:
-#                             return JsonResponse({"error": "Geolocation API request failed.", "status_code": geo_response.status_code}, status=geo_response.status_code)
-#             except Exception as e:
-#                 return JsonResponse({"error": f"Failed to fetch address details: {str(e)}", "status_code": 500}, status=500)
-
-#             customer_address.first_name = first_name
-#             customer_address.last_name = last_name
-#             customer_address.email = email
-#             customer_address.mobile_number = mobile_number
-#             customer_address.alternate_mobile = alternate_mobile
-#             customer_address.address_type = address_type
-#             customer_address.pincode = pincode
-#             customer_address.street = street
-#             customer_address.landmark = landmark
-#             customer_address.latitude = latitude
-#             customer_address.longitude = longitude
-
-#             customer_address.save(update_fields=[
-#                 "first_name", "last_name", "email", "mobile_number",
-#                 "alternate_mobile", "address_type", "pincode", "street",
-#                 "landmark", "village", "mandal", "postoffice", 
-#                 "district", "state", "country", "latitude", "longitude"
-#             ])
-
-#             return JsonResponse({
-#                 "message": "Customer address updated successfully.",
-#                 "status_code": 200,
-#                 "address_id": customer_address.id,
-#                 "pincode_details": {
-#                     "postoffice": customer_address.postoffice,
-#                     "village": customer_address.village,
-#                     "mandal": customer_address.mandal,
-#                     "district": customer_address.district,
-#                     "state": customer_address.state,
-#                     "country": customer_address.country,
-#                     "landmark": customer_address.landmark,
-#                     "latitude": customer_address.latitude,
-#                     "longitude": customer_address.longitude
-#                 }
-#             }, status=200)
-
-#         except json.JSONDecodeError:
-#             return JsonResponse({"error": "Invalid JSON format.", "status_code": 400}, status=400)
-#         except Exception as e:
-#             return JsonResponse({"error": f"An unexpected error occurred: {str(e)}", "status_code": 500}, status=500)
-
-#     return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
 GEOLOCATION_API_URL = "https://nominatim.openstreetmap.org/search"
 
 @csrf_exempt
@@ -1695,16 +1428,13 @@ def edit_customer_address(request):
         except CustomerAddress.DoesNotExist:
             return JsonResponse({"error": "Address not found.", "status_code": 404}, status=404)
 
-        # ------------------- PINCODE API -------------------
         postoffice = mandal = village = district = state = country = ""
         try:
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
             }
             response = requests.get(f"{PINCODE_API_URL}{pincode}", headers=headers, timeout=5)
-            print(f"[PINCODE API RAW RESPONSE] {response.status_code} {response.text}")
             
-            # response = requests.get(f"https://api.postalpincode.in/pincode/{pincode}", timeout=5)
             if response.status_code == 200:
                 response_data = response.json()
                 post_offices = response_data[0].get("PostOffice", [])
@@ -1717,9 +1447,8 @@ def edit_customer_address(request):
                     state = office.get("State", "")
                     country = office.get("Country", "India")
         except Exception as e:
-            print(f"[PINCODE API ERROR] {str(e)}")
+            return JsonResponse({"error": "Failed to fetch pincode details.", "status_code": 400}, status=400)
 
-        # ------------------- GEOLOCATION API -------------------
         if not latitude or not longitude:
             try:
                 query_parts = [pincode, district, state, country]
@@ -1739,9 +1468,8 @@ def edit_customer_address(request):
                         latitude = geo_data[0].get("lat")
                         longitude = geo_data[0].get("lon")
             except Exception as e:
-                print(f"[GEOLOCATION ERROR] {str(e)}")
+                return JsonResponse({"error": "Failed to fetch latitude and longitude for the provided address.", "status_code": 400}, status=400)
 
-        # ------------------- UPDATE FIELDS -------------------
         customer_address.first_name = first_name
         customer_address.last_name = last_name
         customer_address.email = email
@@ -1959,7 +1687,6 @@ def multiple_order_summary(request):
                     unit = None
                     kg_value = 0
                     weight_str = product.specifications.get('weight', '').lower() if isinstance(product.specifications, dict) else ''
-                    print("weight_str", weight_str)
                     match = re.match(r"([\d.]+)\s*(gm|g|gram|kg|kilogram|kilo)", weight_str)
                     if match:
                         value = float(match.group(1))
@@ -1975,7 +1702,6 @@ def multiple_order_summary(request):
 
                     quantity = order.quantity
                     total_weight = kg_value * quantity
-                    print("total_weight", total_weight)
                     normalized_state = address.state.lower().strip()
                     if normalized_state in ['andhra pradesh', 'telangana', 'hyderabad']:
                         state_charge = 0
@@ -2005,7 +1731,6 @@ def multiple_order_summary(request):
                     order.delivery_charge = delivery_charge
                     order.save()
                     total_delivery_charge += delivery_charge
-                    print(f"{product.product_name} - State: {normalized_state}, Base: {base_delivery_charge}, State Charge: {state_charge}, Delivery: {delivery_charge}")
 
                     order_list.append({
                         "order_id": order.id,
@@ -2063,284 +1788,6 @@ def multiple_order_summary(request):
             return JsonResponse({"error": str(e), "status_code": 500}, status=500)
 
     return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
-
-razorpay_client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
-
-# @csrf_exempt
-# def create_razorpay_order(request):
-#     if request.method == 'POST':
-#         try:
-#             data = json.loads(request.body.decode('utf-8'))
-#             customer_id = data.get('customer_id')
-#             order_products = data.get('order_products', [])
-
-#             if not customer_id or not order_products:
-#                 return JsonResponse({"error": "customer_id and order_products are required.", "status_code": 400}, status=400)
-
-#             try:
-#                 customer = CustomerRegisterDetails.objects.get(id=customer_id)
-#             except CustomerRegisterDetails.DoesNotExist:
-#                 return JsonResponse({"error": "Customer not found.", "status_code": 404}, status=404)
-           
-#             try:
-#                 address = CustomerAddress.objects.get(customer_id=customer_id, select_address=True)
-#                 address_id = address.id
-#             except CustomerAddress.DoesNotExist:
-#                 return JsonResponse({
-#                     "error": "No selected address found for the customer. Please select an address first.",
-#                     "status_code": 404
-#                 }, status=404)
-
-#             total_amount = Decimal('0.0')
-#             total_delivery_charge = Decimal('0.0')
-#             grand_total = Decimal('0.0')
-
-#             valid_orders = []
-#             order_ids = [] 
-#             product_ids = [] 
-        
-#             for item in order_products:
-#                 order_id = item.get('order_id')
-#                 product_id = item.get('product_id')
-
-#                 try:
-#                     order = OrderProducts.objects.get(id=order_id, customer=customer, product_id=product_id)
-#                     total_amount += Decimal(str(order.final_price))
-#                     total_delivery_charge += Decimal(str(order.delivery_charge))
-#                     grand_total=total_amount + total_delivery_charge
-#                     order_ids.append(str(order.id))  
-#                     product_ids.append(str(order.product.id)) 
-                    
-#                     valid_orders.append({
-#                         "order_id": order.id,
-#                         "product_id": order.product.id,
-#                         "product_name": order.product.product_name,
-#                         "category": order.category,
-#                         "sub_category": order.sub_category,
-#                         "quantity": order.quantity,
-#                         "amount": float(order.price),
-#                         "total_price": order.final_price,
-#                         "total_delivery_charge":total_delivery_charge,
-#                         "order_status": order.order_status
-#                     })
-#                 except OrderProducts.DoesNotExist:
-#                     return JsonResponse({"error": f"Order ID {order_id} with Product ID {product_id} not found or does not belong to the customer.", "status_code": 404}, status=404)
-#             if total_amount <= 0:
-#                 return JsonResponse({"error": "Total amount must be greater than zero.", "status_code": 400}, status=400)
-#             product_order_id = f"OD{datetime.now().strftime('%Y%m%d%H%M%S')}{''.join(random.choices(string.ascii_uppercase + string.digits, k=4))}"
-#             receipt_id = product_order_id
-#             razorpay_order = razorpay_client.order.create({
-#                 "amount": int(grand_total * 100),
-#                 "currency": "INR",
-#                 "receipt": receipt_id,
-#                 "payment_capture": 1,
-#                 "notes": {  
-#                     "order_ids": ",".join(order_ids), 
-#                     "product_ids": ",".join(product_ids),  
-#                     "customer_id": str(customer.id),
-#                     "address_id": str(address_id) 
-#                 }
-#             })          
-#             callback_url = "settings.RAZORPAY_CALLBACK_URL"
-#             return JsonResponse({
-#                 "message": "Razorpay Order Created Successfully!",
-#                 "razorpay_key": settings.RAZORPAY_KEY_ID,
-#                 "razorpay_order_id": razorpay_order["id"],
-#                 "callback_url": callback_url,
-#                 "customer_id": customer.id,
-#                 "address_id":address_id,
-#                 "total_amount": total_amount,
-#                 "orders": valid_orders,
-#                 "product_order_id":receipt_id,
-#                 "status_code": 201
-#             }, status=201)
-#         except Exception as e:
-#             return JsonResponse({"error": str(e), "status_code": 500}, status=500)
-#     return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
-# @csrf_exempt
-# def razorpay_callback(request):
-#     if request.method != "POST":
-#         return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
-#     try:
-#         data = json.loads(request.body.decode("utf-8"))
-#         required_fields = ["razorpay_payment_id", "razorpay_order_id", "razorpay_signature", "customer_id", "order_products","address_id","product_order_id"]
-#         missing_fields = [field for field in required_fields if field not in data]
-#         if missing_fields:
-#             return JsonResponse({"error": f"Missing required fields: {', '.join(missing_fields)}", "status_code": 400}, status=400)
-#         razorpay_payment_id = data["razorpay_payment_id"]
-#         razorpay_order_id = data["razorpay_order_id"]
-#         razorpay_signature = data["razorpay_signature"]
-#         customer_id = data["customer_id"]
-#         order_products = data["order_products"]
-#         address_id =data["address_id"]
-#         product_order_id = data["product_order_id"]
-#         if not isinstance(order_products, list) or not order_products:
-#             return JsonResponse({"error": "Invalid or missing order_products. It must be a list of order-product mappings.", "status_code": 400}, status=400)
-#         client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
-#         params = {
-#             "razorpay_order_id": razorpay_order_id,
-#             "razorpay_payment_id": razorpay_payment_id,
-#             "razorpay_signature": razorpay_signature,
-#         }
-#         try:
-#             client.utility.verify_payment_signature(params)
-#             payment_details = client.payment.fetch(razorpay_payment_id)
-#             payment_status = payment_details.get("status", "failed")
-#             payment_mode = payment_details.get("method", "unknown")
-#             transaction_id = payment_details.get("id", razorpay_payment_id)
-#             order_list = []
-#             for item in order_products:
-#                 order_id = item.get("order_id")
-#                 product_id = item.get("product_id")
-#                 if not order_id or not product_id:
-#                     return JsonResponse({"error": "Each item in order_products must contain order_id and product_id.", "status_code": 400}, status=400)
-#                 order = OrderProducts.objects.filter(id=order_id, product_id=product_id, customer_id=customer_id).first()
-#                 if order:
-#                     order_list.append(order)
-#             if not order_list:
-#                 return JsonResponse({"error": "No matching orders found for this payment.", "status_code": 404}, status=404)
-#             if payment_status == "captured":
-#                 order_product_ids = []
-#                 category_ids = []
-#                 sub_category_ids = []
-#                 product_ids = []
-#                 total_quantity = 0
-#                 total_amount = Decimal("0.00")
-#                 total_delivery_charge = Decimal("0.00")
-#                 grand_total=0
-#                 first_order = None
-#                 for order in order_list:
-#                     order.order_status = "Paid"
-#                     order.save(update_fields=["order_status"])
-#                     product = order.product
-#                     if product.quantity >= order.quantity:
-#                         product.quantity -= order.quantity
-#                     else:
-#                         product.quantity = 0  
-#                     if product.quantity<= 10 and product.quantity!=0 and product.quantity<0:
-#                        product.availability= "Very Few Products Left"
-#                     elif product.quantity== 0:
-#                        product.availability= "Out of Stock"
-#                     else:
-#                        product.availability="In Stock"
-#                     product.save(update_fields=["quantity","availability"])
-#                     if not first_order:
-#                         first_order = order
-#                     order_product_ids.append(order.id)
-#                     category_ids.append(order.product.category.id)
-#                     sub_category_ids.append(order.product.sub_category.id)
-#                     product_ids.append(order.product.id)
-#                     total_quantity += order.quantity
-#                     total_amount += Decimal(str(order.final_price))
-#                     total_delivery_charge += Decimal(str(order.delivery_charge))
-#                     grand_total =total_amount+ total_delivery_charge
-#                 try:
-#                     customer_address = CustomerAddress.objects.get(id=address_id, customer_id=customer_id)
-#                 except CustomerAddress.DoesNotExist:
-#                     return JsonResponse({
-#                         "error": "Invalid address_id. No such address found for this customer.",
-#                         "status_code": 404
-#                     }, status=404)
-#                 if first_order:
-#                     today = timezone.now().date()
-#                     date_str = today.strftime("%d%m%Y")
-#                     prefix = "PVM"
-#                     base_invoice = f"{prefix}{date_str}"
-#                     latest_invoice = PaymentDetails.objects.filter(created_at__date=today).order_by('-id').first()
-#                     if latest_invoice and latest_invoice.invoice_number:
-#                        last_serial = int(latest_invoice.invoice_number[-4:])
-#                     else:
-#                         last_serial = 0
-#                     new_serial = last_serial + 1
-#                     new_invoice_number = f"{base_invoice}{str(new_serial).zfill(4)}"
-#                     PaymentDetails.objects.create(
-#                         admin=first_order.product.admin,
-#                         customer=first_order.customer,
-#                         customer_address=customer_address,
-#                         category_ids=category_ids,
-#                         sub_category_ids=sub_category_ids,
-#                         product_ids=product_ids,
-#                         order_product_ids=order_product_ids,
-#                         razorpay_order_id=razorpay_order_id,
-#                         razorpay_payment_id=razorpay_payment_id,
-#                         razorpay_signature=razorpay_signature,
-#                         amount=total_amount,
-#                         total_amount=grand_total,
-#                         payment_type="online",
-#                         payment_mode=payment_mode,
-#                         transaction_id=transaction_id,
-#                         quantity=total_quantity,
-#                         product_order_id= product_order_id, 
-#                         invoice_number=new_invoice_number,
-#                         Delivery_status="Pending"
-#                     )
-#                     current_paid_product_ids = [order.product_id for order in order_list]
-#                     CartProducts.objects.filter(
-#                         product_id__in=current_paid_product_ids,
-#                         customer_id=customer_id
-#                     ).delete()
-#                     product_list = []
-#                     for order in order_list:
-#                         try:
-#                             product_details = ProductsDetails.objects.get(id=order.product.id)
-#                             image_path = product_details.product_images[0] if isinstance(product_details.product_images, list) and product_details.product_images else None
-#                             image_url = f"{settings.AWS_S3_BUCKET_URL}/{image_path}" if image_path else ""
-#                             product_name = product_details.product_name
-#                         except ProductsDetails.DoesNotExist:
-#                             image_url = ""
-#                             product_name = "Product Not Found"
-#                         product_list.append({
-#                             "image_url": image_url,
-#                             "name": product_name,
-#                             "quantity": order.quantity,
-#                             "price": order.final_price,
-#                         })
-#                     send_html_order_confirmation(
-#                         to_email=first_order.customer.email,
-#                         customer_name=f"{first_order.customer.first_name} {first_order.customer.last_name}",
-#                         product_list=product_list,
-#                         total_amount=grand_total,
-#                         order_id=product_order_id,
-#                         transaction_id=transaction_id,
-#                     )                    
-#                     mobile_number = first_order.customer.mobile_no
-#                     order_id = product_order_id
-#                     amount = grand_total
-
-#                     try:
-#                         send_order_confirmation_sms([mobile_number], order_id, amount)
-#                     except Exception as e:
-#                         print(f"SMS send failed: {str(e)}")
-#                     return JsonResponse({
-#                         "message": "Payment successful for all orders!",
-#                         "razorpay_order_id": razorpay_order_id,
-#                         "customer_id": customer_id,
-#                         "total_orders_paid": len(order_product_ids),
-#                         "payment_mode": payment_mode,
-#                         "transaction_id": transaction_id,
-#                         "amount": total_amount,
-#                         "total_amount":grand_total,
-#                         "total_delivery_charge":total_delivery_charge,
-#                         "order_product_ids": order_product_ids,  
-#                         "category_ids": category_ids,  
-#                         "sub_category_ids": sub_category_ids, 
-#                         "product_order_id": product_order_id,
-#                         "invoice_number": new_invoice_number,
-#                         "product_ids": product_ids,
-#                         "status_code": 200
-#                     }, status=200)
-
-#             else:
-#                 OrderProducts.objects.filter(id__in=[order.id for order in order_list]).update(order_status="Failed")
-#                 return JsonResponse({"error": "Payment failed.", "razorpay_order_id": razorpay_order_id, "status_code": 400}, status=400)
-
-#         except razorpay.errors.SignatureVerificationError:
-#             OrderProducts.objects.filter(id__in=[order.id for order in order_list]).update(order_status="Failed")
-#             return JsonResponse({"error": "Signature verification failed.", "razorpay_order_id": razorpay_order_id, "status_code": 400}, status=400)
-#     except Exception as e:
-#         return JsonResponse({"error": str(e), "status_code": 500}, status=500)
-    
-
 
 razorpay_client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
 @csrf_exempt
@@ -2408,7 +1855,6 @@ def create_razorpay_order(request):
             total_quantity += order.quantity
             total_amount += Decimal(str(order.final_price))
             total_delivery_charge += Decimal(str(order.delivery_charge))
-        print(total_quantity, "total_quantity")
         grand_total = total_amount + total_delivery_charge
 
         if grand_total <= 0:
@@ -2466,16 +1912,6 @@ def create_razorpay_order(request):
 
     except Exception as e:
         return JsonResponse({"error": str(e), "status_code": 500}, status=500)
-import hmac
-import hashlib
-import json
-
-from razorpay import Client
-import hmac
-import hashlib
-
-import traceback
-from django.db import transaction
 
 @csrf_exempt
 def razorpay_webhook(request):
@@ -2631,8 +2067,8 @@ def razorpay_webhook(request):
         return JsonResponse({"error": str(e)}, status=500)
     
 def send_html_order_confirmation(to_email, customer_name, product_list, total_amount, order_id, transaction_id):
-    subject = "[Pavaman] Order Confirmation - Payment Received"
-    logo_url = f"{settings.AWS_S3_BUCKET_URL}/static/images/aviation-logo.png"
+    subject = "[Dronekits.in] Order Confirmation - Payment Received"
+    logo_url = f"{settings.AWS_S3_BUCKET_URL}/static/images/drk_mail_logo.png"
 
     product_html = ""
     for product in product_list:
@@ -2659,7 +2095,7 @@ def send_html_order_confirmation(to_email, customer_name, product_list, total_am
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: auto; border: 1px solid #ddd; padding: 20px; border-radius: 10px; background-color: #ffffff;">
         <!-- Logo in top-right -->
         <div style="text-align: right;">
-            <img src="{logo_url}" alt="Pavaman Logo" style="max-height: 60px;" />
+            <img src="{logo_url}" alt="Dronekits Logo" style="max-height: 60px;" />
         </div>
 
         <h2 style="color: #2E7D32;">Thank You for Your Purchase!</h2>
@@ -2680,7 +2116,7 @@ def send_html_order_confirmation(to_email, customer_name, product_list, total_am
             If you have any questions or need assistance, feel free to contact our support team.
         </p>
 
-        <p style="font-size: 15px;">Thank you for choosing <strong>Pavaman</strong>.<br>We hope you enjoy your purchase!</p>
+        <p style="font-size: 15px;">Thank you for choosing <strong>Dronekits.in</strong>.<br>We hope you enjoy your purchase!</p>
 
         <p style="margin-top: 30px; font-size: 14px; color: #888;">This is an automated email. Please do not reply.</p>
     </div>
@@ -2696,7 +2132,6 @@ def send_html_order_confirmation(to_email, customer_name, product_list, total_am
         email.send(fail_silently=False)
         return True
     except Exception as e:
-        print(f"[Email Error] {e}")
         return False
 
 @csrf_exempt
@@ -2706,7 +2141,6 @@ def cancel_multiple_orders(request):
             data = json.loads(request.body.decode('utf-8'))
             customer_id = data.get('customer_id')
             orders = data.get('orders', [])
-            print("Received Data:", data) 
             if not customer_id or not orders:
                 return JsonResponse({"error": "customer_id and orders are required.", "status_code": 400}, status=400)
 
@@ -3844,17 +3278,12 @@ def report_sales_summary(request):
 
 @csrf_exempt
 def report_monthly_revenue_by_year(request):
-    print(">>> report_monthly_revenue_by_year view called")
     if request.method != "POST":
         return JsonResponse({"error": "Only POST method allowed", "status_code": 405}, status=405)
-
     try:
         data = json.loads(request.body.decode("utf-8"))
         admin_id = data.get('admin_id')
         action = data.get('action')
-
-        print(">>> Received data:", data)
-
         if not admin_id:
             return JsonResponse({"error": "admin_id is required", "status_code": 400}, status=400)
 
@@ -3866,16 +3295,11 @@ def report_monthly_revenue_by_year(request):
             return _report_weekly(data, admin_id)
         else:
             return JsonResponse({"error": "Invalid action. Use 'month', 'year' or 'week'.", "status_code": 400}, status=400)
-
     except Exception as e:
-        print(">>> Exception occurred:", str(e))
         return JsonResponse({"error": str(e), "status_code": 500})
-
-
 def _report_monthly(data, admin_id):
     start_date_str = data.get('start_date_str')
     end_date_str = data.get('end_date_str')
-    print(">>> Monthly Report Start:", start_date_str, "End:", end_date_str)
 
     if not start_date_str or not end_date_str:
         current_year = datetime.now().year
@@ -3892,7 +3316,6 @@ def _report_monthly(data, admin_id):
         return JsonResponse({"error": "End date must be after start date", "status_code": 400}, status=400)
 
     diff = relativedelta(end_date, start_date)
-    print(">>> Date difference:", diff)
     if diff.years > 1 or (diff.years == 1 and (diff.months > 0)):
         return JsonResponse({"error": "Date range cannot exceed 1 year", "status_code": 400}, status=400)
     monthly_revenue = {}
@@ -3907,9 +3330,6 @@ def _report_monthly(data, admin_id):
         created_at__date__gte=start_date.date(),
         created_at__date__lte=end_date.date()
     )
-
-    print(f">>> Found {payments.count()} payments")
-
     for payment in payments:
         key = f"{calendar.month_abbr[payment.created_at.month]} {payment.created_at.year}"
         if key in monthly_revenue:
@@ -4199,7 +3619,7 @@ def generate_invoice_for_customer(request):
                     "address": f"{address.street}, {address.landmark}, {address.village}, {address.district}, {address.state}, {address.pincode}" if address else "",
                     "phone": address.mobile_number if address else "",
                 },
-                "sold_by": "Pavaman",
+                "sold_by": "Dronekits.in",
                 "total_items": len(items),
                 "items": items,
                 "grand_total": payment.amount,
@@ -4471,6 +3891,11 @@ def edit_profile_email_otp_handler(request):
                 new_email = data.get("email")
                 if not new_email:
                     return JsonResponse({"error": "New email address is required.", "customer_id": customer_id}, status=400)
+                if CustomerRegisterDetails.objects.filter(email__iexact=new_email).exclude(id=customer_id).exists():
+                    return JsonResponse({
+                        "error": "This email address is already registered with another account.",
+                        "customer_id": customer_id
+                    }, status=400)
 
                 otp = random.randint(100000, 999999)
                 customer.otp = otp
@@ -4516,8 +3941,8 @@ def send_email_verification_otp_email(customer):
     otp = customer.otp
     email = customer.email
     first_name = customer.first_name or 'Customer'
-    logo_url = f"{settings.AWS_S3_BUCKET_URL}/static/images/aviation-logo.png"
-    subject = "[Pavaman] OTP to Verify Your Email"
+    logo_url = f"{settings.AWS_S3_BUCKET_URL}/static/images/drk_mail_logo.png"
+    subject = "[Dronekits.in] OTP to Verify Your Email"
     text_content = f"Hello {first_name},\n\nYour OTP for verifying your email is: {otp}"
     
     html_content = f"""
@@ -4544,7 +3969,7 @@ def send_email_verification_otp_email(customer):
     <body style="margin: 0; padding: 0; font-family: 'Inter', sans-serif; background-color: #f5f5f5;">
         <div class="container" style="margin: 40px auto; background-color: #ffffff; border-radius: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); padding: 40px 30px; max-width: 480px; text-align: left;">
             <div style="text-align: center;">
-            <img src="{logo_url}" alt="Pavaman Logo" class="logo" style="max-width: 280px; height: auto; margin-bottom: 20px;" />
+            <img src="{logo_url}" alt="Dronekits Logo" class="logo" style="max-width: 280px; height: auto; margin-bottom: 20px;" />
             <h2 style="margin-top: 0; color: #222;">Verify Your Email</h2>
             </div>
 
@@ -4562,7 +3987,7 @@ def send_email_verification_otp_email(customer):
 
             <p style="color: #888; font-size: 14px; margin-top: 20px;">
                 If you didn't request this, you can safely ignore this email.<br/>
-                You're receiving this because you have an account on Pavaman.
+                You're receiving this because you have an account on Dronekits.in.
             </p>
             <p style="margin-top: 30px; font-size: 14px; color: #888;">This is an automated email. Please do not reply.</p>
         </div>
@@ -4810,99 +4235,6 @@ def submit_feedback_rating(request):
             "error": "Invalid HTTP method. Only POST allowed.",
             "status_code": 405
         }, status=405)
-
-
-# @csrf_exempt
-# def submit_feedback_rating(request):
-#     if request.method == "POST":
-#         try:
-#             data = json.loads(request.body.decode("utf-8"))
-
-#             customer_id = data.get('customer_id')
-#             product_id = data.get('product_id')
-#             product_order_id = data.get('product_order_id')
-#             rating = data.get('rating')
-#             feedback = data.get('feedback', "")
-#             if not all([customer_id, product_id, product_order_id]):
-#                 return JsonResponse({
-#                     "error": "customer_id, product_id, and product_order_id are required.",
-#                     "status_code": 400
-#                 }, status=400)
-
-#             try:
-#                 customer = CustomerRegisterDetails.objects.get(id=customer_id)
-#                 product = ProductsDetails.objects.get(id=product_id)
-#                 admin = product.admin
-#                 payment = PaymentDetails.objects.filter(
-#                     customer=customer, product_order_id=product_order_id
-#                 ).first()
-#                 if not payment:
-#                     return JsonResponse({
-#                         "error": "Payment not found for given product_order_id.",
-#                         "status_code": 404
-#                     }, status=404)
-#                 order_product = OrderProducts.objects.filter(
-#                     id__in=payment.order_product_ids,
-#                     product=product,
-#                     customer=customer
-#                 ).first()
-#                 if not order_product:
-#                     return JsonResponse({
-#                         "error": "Matching order product not found.",
-#                         "status_code": 404
-#                     }, status=404)
-
-#             except Exception as e:
-#                 return JsonResponse({
-#                     "error": f"Related object fetch error: {str(e)}",
-#                     "status_code": 404
-#                 }, status=404)
-#             existing_feedback = FeedbackRating.objects.filter(
-#                 customer=customer, product=product, order_product=order_product
-#             ).first()
-#             if existing_feedback:
-#                 return JsonResponse({
-#                     "error": "Feedback already submitted for this product and order.",
-#                     "status_code": 400
-#                 }, status=400)
-#             current_time = datetime.utcnow() + timedelta(hours=5, minutes=30)
-#             FeedbackRating.objects.create(
-#                 admin=admin,
-#                 customer=customer,
-#                 payment=payment,
-#                 order_product=order_product,
-#                 order_id=product_order_id,
-#                 product=product,
-#                 category=product.category.category_name if product.category else "",
-#                 sub_category=product.sub_category.sub_category_name if product.sub_category else "",
-#                 rating=rating if rating else None,
-#                 feedback=feedback,
-#                 created_at=current_time
-#             )
-#             return JsonResponse({
-#                 "message": "Feedback submitted successfully.",
-#                 "status_code": 201,
-#                 "customer_id":customer_id,
-#                 "submitted_at": current_time
-#             }, status=201)
-
-#         except json.JSONDecodeError:
-#             return JsonResponse({
-#                 "error": "Invalid JSON format.",
-#                 "status_code": 400
-#             }, status=400)
-
-#         except Exception as e:
-#             return JsonResponse({
-#                 "error": f"Server error: {str(e)}",
-#                 "status_code": 500
-#             }, status=500)
-
-#     else:
-#         return JsonResponse({
-#             "error": "Invalid HTTP method. Only POST allowed.",
-#             "status_code": 405
-#         }, status=405)
 
 @csrf_exempt
 def edit_feedback_rating(request):
