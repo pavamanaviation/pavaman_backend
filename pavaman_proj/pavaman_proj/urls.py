@@ -34,13 +34,13 @@ from pavaman_backend.customer_views import (customer_register,customer_login,vie
     ,cancel_multiple_orders,filter_product_price_each_category,sort_products_inside_subcategory,
     get_customer_details_by_admin,verify_email,resend_verification_email,google_login,update_cart_quantity,
     google_submit_mobile,otp_generate,verify_otp,set_new_password,filter_and_sort_products_each_subcategory,
-    create_razorpay_order,razorpay_callback,customer_search_categories,customer_search_subcategories,customer_search_products,
+    create_razorpay_order,customer_search_categories,customer_search_subcategories,customer_search_products,
     get_payment_details_by_order, download_material_file,customer_get_payment_details_by_order,customer_logout,
     report_monthly_revenue_by_year,report_sales_summary, edit_customer_profile,get_customer_profile,
     top_five_selling_products,get_all_category_subcategory,not_selling_products,filter_my_order,
     generate_invoice_for_customer,admin_order_status,customer_cart_view_search,edit_profile_mobile_otp_handler,
     edit_profile_email_otp_handler,filter_and_sort_products,submit_feedback_rating,edit_feedback_rating,view_rating,
-    add_to_wishlist,view_wishlist,latest_products_current_year,view_products_by_category_and_subcategory,share_product_preview
+    add_to_wishlist,view_wishlist,latest_products_current_year,view_products_by_category_and_subcategory,share_product_preview,razorpay_webhook
 )
 from django.conf.urls.static import static
 from django.conf import settings
@@ -101,7 +101,7 @@ urlpatterns = [
     path('sort-products-inside-subcategory',sort_products_inside_subcategory,name= 'sort_products_inside_subcategory'),
     path("get-customer-by-admin/", get_customer_details_by_admin, name="get_customer_details_by_admin"),
     path('create-razorpay-order',create_razorpay_order,name= 'create_razorpay_order'),
-    path("razorpay-callback", razorpay_callback, name="razorpay_callback"),
+    # path("razorpay-callback", razorpay_callback, name="razorpay_callback"),
     path("customer-search-categories",customer_search_categories, name="customer_search_categories"),
     path("customer-search-subcategories",customer_search_subcategories, name="customer_search_subcategories"),
     path("customer-search-products",customer_search_products, name="customer_search_products"),
@@ -143,5 +143,6 @@ urlpatterns = [
     path('latest-products', latest_products_current_year, name='latest_products_current_year'),
     path('view-products-by-category-and-subcategory',view_products_by_category_and_subcategory,name='view_products_by_category_and_subcategory'),
     path('share-preview/<int:product_id>/',share_product_preview,name='share_product_preview'),
+    path('razorpay-webhook', razorpay_webhook, name='razorpay_webhook'),
 
 ]+ static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

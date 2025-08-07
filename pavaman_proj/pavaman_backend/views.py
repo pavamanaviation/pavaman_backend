@@ -2382,91 +2382,91 @@ def download_average_rating_excel(request):
         except Exception as e:
             return JsonResponse({"error": f"Server error: {str(e)}", "status_code": 500}, status=500)
     return JsonResponse({"error": "Invalid HTTP method. Only POST allowed.", "status_code": 405}, status=405)
-# @csrf_exempt
-# def product_discount_inventory_view(request):
-#     if request.method == 'POST':
-#         try:
-#             data = json.loads(request.body)
-#             admin_id = data.get('admin_id')
-#             action = data.get('action')
-#             if not admin_id:
-#                 return JsonResponse({"error": "Admin ID is required.", "status_code": 400}, status=400)
-#             if not action or action not in ['inventory', 'discount']:
-#                 return JsonResponse({"error": "Valid 'action' is required: 'inventory' or 'discount'.", "status_code": 400}, status=400)            
-#             products = ProductsDetails.objects.filter(admin_id=admin_id).order_by('created_at')
-#             if not products.exists():
-#                 return JsonResponse({
-#                     "message": "No products with discount found.",
-#                     "status_code": 200,
-#                     "admin_id": str(admin_id)
-#                 }, status=200)
-#             product_list = []
-#             for product in products:
-#                 if isinstance(product.product_images, list):
-#                     image_urls = [
-#                         f"https://{settings.AWS_STORAGE_BUCKET_NAME}.s3.{settings.AWS_S3_REGION_NAME}.amazonaws.com/{img}"
-#                         for img in product.product_images
-#                     ]
-#                 elif isinstance(product.product_images, str):
-#                     image_urls = [
-#                         f"https://{settings.AWS_STORAGE_BUCKET_NAME}.s3.{settings.AWS_S3_REGION_NAME}.amazonaws.com/{product.product_images}"
-#                     ]
-#                 else:
-#                     image_urls = []
-#                 material_file_url = (
-#                     f"https://{settings.AWS_STORAGE_BUCKET_NAME}.s3.{settings.AWS_S3_REGION_NAME}.amazonaws.com/{product.material_file}"
-#                     if product.material_file else ""
-#                 )
-#                 price = float(product.price or 0)
-#                 discount = float(product.discount or 0)
-#                 gst = float(product.gst or 0)
-#                 final_price = price - (price * discount / 100)
-#                 product_data = {
-#                     "product_id": str(product.id),
-#                     "product_name": product.product_name,
-#                     "sku_number": product.sku_number,
-#                     "hsn_code":product.hsn_code,
-#                     "price": round(price, 2),
-#                     "gst": f"{round(gst, 2)}%",
-#                     "final_price": round(final_price, 2),
-#                     "discount": f"{round(discount)}%",
-#                     "quantity": product.quantity,
-#                     "material_file": material_file_url,
-#                     "description": product.description,
-#                     "number_of_specifications": product.number_of_specifications,
-#                     "specifications": product.specifications,
-#                     "product_images": image_urls,
-#                     "created_at": product.created_at,
-#                     "category": product.category.category_name if product.category else None,
-#                     "sub_category": product.sub_category.sub_category_name if product.sub_category else None,
-#                     "category_id": product.category_id,
-#                     "sub_category_id": product.sub_category_id,
-#                     "availability": product.availability,
-#                     "product_status": product.product_status,
-#                     "cart_status": product.cart_status,
-#                 }
-#                 if action == 'inventory':
-#                     total_sold_quantity = OrderProducts.objects.filter(
-#                         product_id=product.id,
-#                         order_status='Paid'
-#                     ).aggregate(total=Sum('quantity'))['total'] or 0
-#                     product_data["total_quantity_sold"] = total_sold_quantity
-#                 product_list.append(product_data)
-#             return JsonResponse({
-#                 "message": f"{action.capitalize()} products retrieved successfully.",
-#                 "products": product_list,
-#                 "status_code": 200,
-#                 "admin_id": str(admin_id)
-#             }, status=200)
-#         except json.JSONDecodeError:
-#             return JsonResponse({"error": "Invalid JSON data.", "status_code": 400}, status=400)
-#         except Exception as e:
-#             return JsonResponse({"error": f"An unexpected error occurred: {str(e)}", "status_code": 500}, status=500)
-#     return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
-
-
 @csrf_exempt
 def product_discount_inventory_view(request):
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            admin_id = data.get('admin_id')
+            action = data.get('action')
+            if not admin_id:
+                return JsonResponse({"error": "Admin ID is required.", "status_code": 400}, status=400)
+            if not action or action not in ['inventory', 'discount']:
+                return JsonResponse({"error": "Valid 'action' is required: 'inventory' or 'discount'.", "status_code": 400}, status=400)            
+            products = ProductsDetails.objects.filter(admin_id=admin_id).order_by('created_at')
+            if not products.exists():
+                return JsonResponse({
+                    "message": "No products with discount found.",
+                    "status_code": 200,
+                    "admin_id": str(admin_id)
+                }, status=200)
+            product_list = []
+            for product in products:
+                if isinstance(product.product_images, list):
+                    image_urls = [
+                        f"https://{settings.AWS_STORAGE_BUCKET_NAME}.s3.{settings.AWS_S3_REGION_NAME}.amazonaws.com/{img}"
+                        for img in product.product_images
+                    ]
+                elif isinstance(product.product_images, str):
+                    image_urls = [
+                        f"https://{settings.AWS_STORAGE_BUCKET_NAME}.s3.{settings.AWS_S3_REGION_NAME}.amazonaws.com/{product.product_images}"
+                    ]
+                else:
+                    image_urls = []
+                material_file_url = (
+                    f"https://{settings.AWS_STORAGE_BUCKET_NAME}.s3.{settings.AWS_S3_REGION_NAME}.amazonaws.com/{product.material_file}"
+                    if product.material_file else ""
+                )
+                price = float(product.price or 0)
+                discount = float(product.discount or 0)
+                gst = float(product.gst or 0)
+                final_price = price - (price * discount / 100)
+                product_data = {
+                    "product_id": str(product.id),
+                    "product_name": product.product_name,
+                    "sku_number": product.sku_number,
+                    "hsn_code":product.hsn_code,
+                    "price": round(price, 2),
+                    "gst": f"{round(gst, 2)}%",
+                    "final_price": round(final_price, 2),
+                    "discount": f"{round(discount)}%",
+                    "quantity": product.quantity,
+                    "material_file": material_file_url,
+                    "description": product.description,
+                    "number_of_specifications": product.number_of_specifications,
+                    "specifications": product.specifications,
+                    "product_images": image_urls,
+                    "created_at": product.created_at,
+                    "category": product.category.category_name if product.category else None,
+                    "sub_category": product.sub_category.sub_category_name if product.sub_category else None,
+                    "category_id": product.category_id,
+                    "sub_category_id": product.sub_category_id,
+                    "availability": product.availability,
+                    "product_status": product.product_status,
+                    "cart_status": product.cart_status,
+                }
+                if action == 'inventory':
+                    total_sold_quantity = OrderProducts.objects.filter(
+                        product_id=product.id,
+                        order_status='Paid'
+                    ).aggregate(total=Sum('quantity'))['total'] or 0
+                    product_data["total_quantity_sold"] = total_sold_quantity
+                product_list.append(product_data)
+            return JsonResponse({
+                "message": f"{action.capitalize()} products retrieved successfully.",
+                "products": product_list,
+                "status_code": 200,
+                "admin_id": str(admin_id)
+            }, status=200)
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON data.", "status_code": 400}, status=400)
+        except Exception as e:
+            return JsonResponse({"error": f"An unexpected error occurred: {str(e)}", "status_code": 500}, status=500)
+    return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
+
+
+# @csrf_exempt
+# def product_discount_inventory_view(request):
     if request.method == 'POST':
         try:
             data = json.loads(request.body)

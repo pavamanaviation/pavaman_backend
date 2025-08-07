@@ -9,7 +9,7 @@ import calendar
 from datetime import datetime, timedelta
 from collections import Counter
 from decimal import Decimal
-from django.http import Http404, HttpResponse, JsonResponse, FileResponse, StreamingHttpResponse
+from django.http import Http404, HttpResponse, HttpResponseBadRequest, JsonResponse, FileResponse, StreamingHttpResponse
 from django.conf import settings
 from django.utils import timezone
 from django.utils.timezone import now
@@ -1978,9 +1978,9 @@ def multiple_order_summary(request):
                     print("total_weight", total_weight)
                     normalized_state = address.state.lower().strip()
                     if normalized_state in ['andhra pradesh', 'telangana', 'hyderabad']:
-                        state_charge = 20
+                        state_charge = 0
                     else:
-                        state_charge = 100
+                        state_charge = 0
 
                     unit_weight = kg_value
                     base_delivery_charge = 0
@@ -1989,10 +1989,10 @@ def multiple_order_summary(request):
                         unit_weight = kg_value
                         base_delivery_charge = 0
                         for _ in range(quantity):
-                            if unit_weight <= 10:
-                                unit_charge = 50.00
-                            elif 10 < unit_weight <= 20:
-                                unit_charge = 150.00
+                            if unit_weight <= 0:
+                                unit_charge = 0.00
+                            elif 0 < unit_weight <= 0:
+                                unit_charge = 0.00
                             else:
                                 extra_weight = unit_weight - 20
                                 extra_blocks = math.ceil(extra_weight / 10)
@@ -2066,234 +2066,545 @@ def multiple_order_summary(request):
 
 razorpay_client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
 
+# @csrf_exempt
+# def create_razorpay_order(request):
+#     if request.method == 'POST':
+#         try:
+#             data = json.loads(request.body.decode('utf-8'))
+#             customer_id = data.get('customer_id')
+#             order_products = data.get('order_products', [])
+
+#             if not customer_id or not order_products:
+#                 return JsonResponse({"error": "customer_id and order_products are required.", "status_code": 400}, status=400)
+
+#             try:
+#                 customer = CustomerRegisterDetails.objects.get(id=customer_id)
+#             except CustomerRegisterDetails.DoesNotExist:
+#                 return JsonResponse({"error": "Customer not found.", "status_code": 404}, status=404)
+           
+#             try:
+#                 address = CustomerAddress.objects.get(customer_id=customer_id, select_address=True)
+#                 address_id = address.id
+#             except CustomerAddress.DoesNotExist:
+#                 return JsonResponse({
+#                     "error": "No selected address found for the customer. Please select an address first.",
+#                     "status_code": 404
+#                 }, status=404)
+
+#             total_amount = Decimal('0.0')
+#             total_delivery_charge = Decimal('0.0')
+#             grand_total = Decimal('0.0')
+
+#             valid_orders = []
+#             order_ids = [] 
+#             product_ids = [] 
+        
+#             for item in order_products:
+#                 order_id = item.get('order_id')
+#                 product_id = item.get('product_id')
+
+#                 try:
+#                     order = OrderProducts.objects.get(id=order_id, customer=customer, product_id=product_id)
+#                     total_amount += Decimal(str(order.final_price))
+#                     total_delivery_charge += Decimal(str(order.delivery_charge))
+#                     grand_total=total_amount + total_delivery_charge
+#                     order_ids.append(str(order.id))  
+#                     product_ids.append(str(order.product.id)) 
+                    
+#                     valid_orders.append({
+#                         "order_id": order.id,
+#                         "product_id": order.product.id,
+#                         "product_name": order.product.product_name,
+#                         "category": order.category,
+#                         "sub_category": order.sub_category,
+#                         "quantity": order.quantity,
+#                         "amount": float(order.price),
+#                         "total_price": order.final_price,
+#                         "total_delivery_charge":total_delivery_charge,
+#                         "order_status": order.order_status
+#                     })
+#                 except OrderProducts.DoesNotExist:
+#                     return JsonResponse({"error": f"Order ID {order_id} with Product ID {product_id} not found or does not belong to the customer.", "status_code": 404}, status=404)
+#             if total_amount <= 0:
+#                 return JsonResponse({"error": "Total amount must be greater than zero.", "status_code": 400}, status=400)
+#             product_order_id = f"OD{datetime.now().strftime('%Y%m%d%H%M%S')}{''.join(random.choices(string.ascii_uppercase + string.digits, k=4))}"
+#             receipt_id = product_order_id
+#             razorpay_order = razorpay_client.order.create({
+#                 "amount": int(grand_total * 100),
+#                 "currency": "INR",
+#                 "receipt": receipt_id,
+#                 "payment_capture": 1,
+#                 "notes": {  
+#                     "order_ids": ",".join(order_ids), 
+#                     "product_ids": ",".join(product_ids),  
+#                     "customer_id": str(customer.id),
+#                     "address_id": str(address_id) 
+#                 }
+#             })          
+#             callback_url = "settings.RAZORPAY_CALLBACK_URL"
+#             return JsonResponse({
+#                 "message": "Razorpay Order Created Successfully!",
+#                 "razorpay_key": settings.RAZORPAY_KEY_ID,
+#                 "razorpay_order_id": razorpay_order["id"],
+#                 "callback_url": callback_url,
+#                 "customer_id": customer.id,
+#                 "address_id":address_id,
+#                 "total_amount": total_amount,
+#                 "orders": valid_orders,
+#                 "product_order_id":receipt_id,
+#                 "status_code": 201
+#             }, status=201)
+#         except Exception as e:
+#             return JsonResponse({"error": str(e), "status_code": 500}, status=500)
+#     return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
+# @csrf_exempt
+# def razorpay_callback(request):
+#     if request.method != "POST":
+#         return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
+#     try:
+#         data = json.loads(request.body.decode("utf-8"))
+#         required_fields = ["razorpay_payment_id", "razorpay_order_id", "razorpay_signature", "customer_id", "order_products","address_id","product_order_id"]
+#         missing_fields = [field for field in required_fields if field not in data]
+#         if missing_fields:
+#             return JsonResponse({"error": f"Missing required fields: {', '.join(missing_fields)}", "status_code": 400}, status=400)
+#         razorpay_payment_id = data["razorpay_payment_id"]
+#         razorpay_order_id = data["razorpay_order_id"]
+#         razorpay_signature = data["razorpay_signature"]
+#         customer_id = data["customer_id"]
+#         order_products = data["order_products"]
+#         address_id =data["address_id"]
+#         product_order_id = data["product_order_id"]
+#         if not isinstance(order_products, list) or not order_products:
+#             return JsonResponse({"error": "Invalid or missing order_products. It must be a list of order-product mappings.", "status_code": 400}, status=400)
+#         client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
+#         params = {
+#             "razorpay_order_id": razorpay_order_id,
+#             "razorpay_payment_id": razorpay_payment_id,
+#             "razorpay_signature": razorpay_signature,
+#         }
+#         try:
+#             client.utility.verify_payment_signature(params)
+#             payment_details = client.payment.fetch(razorpay_payment_id)
+#             payment_status = payment_details.get("status", "failed")
+#             payment_mode = payment_details.get("method", "unknown")
+#             transaction_id = payment_details.get("id", razorpay_payment_id)
+#             order_list = []
+#             for item in order_products:
+#                 order_id = item.get("order_id")
+#                 product_id = item.get("product_id")
+#                 if not order_id or not product_id:
+#                     return JsonResponse({"error": "Each item in order_products must contain order_id and product_id.", "status_code": 400}, status=400)
+#                 order = OrderProducts.objects.filter(id=order_id, product_id=product_id, customer_id=customer_id).first()
+#                 if order:
+#                     order_list.append(order)
+#             if not order_list:
+#                 return JsonResponse({"error": "No matching orders found for this payment.", "status_code": 404}, status=404)
+#             if payment_status == "captured":
+#                 order_product_ids = []
+#                 category_ids = []
+#                 sub_category_ids = []
+#                 product_ids = []
+#                 total_quantity = 0
+#                 total_amount = Decimal("0.00")
+#                 total_delivery_charge = Decimal("0.00")
+#                 grand_total=0
+#                 first_order = None
+#                 for order in order_list:
+#                     order.order_status = "Paid"
+#                     order.save(update_fields=["order_status"])
+#                     product = order.product
+#                     if product.quantity >= order.quantity:
+#                         product.quantity -= order.quantity
+#                     else:
+#                         product.quantity = 0  
+#                     if product.quantity<= 10 and product.quantity!=0 and product.quantity<0:
+#                        product.availability= "Very Few Products Left"
+#                     elif product.quantity== 0:
+#                        product.availability= "Out of Stock"
+#                     else:
+#                        product.availability="In Stock"
+#                     product.save(update_fields=["quantity","availability"])
+#                     if not first_order:
+#                         first_order = order
+#                     order_product_ids.append(order.id)
+#                     category_ids.append(order.product.category.id)
+#                     sub_category_ids.append(order.product.sub_category.id)
+#                     product_ids.append(order.product.id)
+#                     total_quantity += order.quantity
+#                     total_amount += Decimal(str(order.final_price))
+#                     total_delivery_charge += Decimal(str(order.delivery_charge))
+#                     grand_total =total_amount+ total_delivery_charge
+#                 try:
+#                     customer_address = CustomerAddress.objects.get(id=address_id, customer_id=customer_id)
+#                 except CustomerAddress.DoesNotExist:
+#                     return JsonResponse({
+#                         "error": "Invalid address_id. No such address found for this customer.",
+#                         "status_code": 404
+#                     }, status=404)
+#                 if first_order:
+#                     today = timezone.now().date()
+#                     date_str = today.strftime("%d%m%Y")
+#                     prefix = "PVM"
+#                     base_invoice = f"{prefix}{date_str}"
+#                     latest_invoice = PaymentDetails.objects.filter(created_at__date=today).order_by('-id').first()
+#                     if latest_invoice and latest_invoice.invoice_number:
+#                        last_serial = int(latest_invoice.invoice_number[-4:])
+#                     else:
+#                         last_serial = 0
+#                     new_serial = last_serial + 1
+#                     new_invoice_number = f"{base_invoice}{str(new_serial).zfill(4)}"
+#                     PaymentDetails.objects.create(
+#                         admin=first_order.product.admin,
+#                         customer=first_order.customer,
+#                         customer_address=customer_address,
+#                         category_ids=category_ids,
+#                         sub_category_ids=sub_category_ids,
+#                         product_ids=product_ids,
+#                         order_product_ids=order_product_ids,
+#                         razorpay_order_id=razorpay_order_id,
+#                         razorpay_payment_id=razorpay_payment_id,
+#                         razorpay_signature=razorpay_signature,
+#                         amount=total_amount,
+#                         total_amount=grand_total,
+#                         payment_type="online",
+#                         payment_mode=payment_mode,
+#                         transaction_id=transaction_id,
+#                         quantity=total_quantity,
+#                         product_order_id= product_order_id, 
+#                         invoice_number=new_invoice_number,
+#                         Delivery_status="Pending"
+#                     )
+#                     current_paid_product_ids = [order.product_id for order in order_list]
+#                     CartProducts.objects.filter(
+#                         product_id__in=current_paid_product_ids,
+#                         customer_id=customer_id
+#                     ).delete()
+#                     product_list = []
+#                     for order in order_list:
+#                         try:
+#                             product_details = ProductsDetails.objects.get(id=order.product.id)
+#                             image_path = product_details.product_images[0] if isinstance(product_details.product_images, list) and product_details.product_images else None
+#                             image_url = f"{settings.AWS_S3_BUCKET_URL}/{image_path}" if image_path else ""
+#                             product_name = product_details.product_name
+#                         except ProductsDetails.DoesNotExist:
+#                             image_url = ""
+#                             product_name = "Product Not Found"
+#                         product_list.append({
+#                             "image_url": image_url,
+#                             "name": product_name,
+#                             "quantity": order.quantity,
+#                             "price": order.final_price,
+#                         })
+#                     send_html_order_confirmation(
+#                         to_email=first_order.customer.email,
+#                         customer_name=f"{first_order.customer.first_name} {first_order.customer.last_name}",
+#                         product_list=product_list,
+#                         total_amount=grand_total,
+#                         order_id=product_order_id,
+#                         transaction_id=transaction_id,
+#                     )                    
+#                     mobile_number = first_order.customer.mobile_no
+#                     order_id = product_order_id
+#                     amount = grand_total
+
+#                     try:
+#                         send_order_confirmation_sms([mobile_number], order_id, amount)
+#                     except Exception as e:
+#                         print(f"SMS send failed: {str(e)}")
+#                     return JsonResponse({
+#                         "message": "Payment successful for all orders!",
+#                         "razorpay_order_id": razorpay_order_id,
+#                         "customer_id": customer_id,
+#                         "total_orders_paid": len(order_product_ids),
+#                         "payment_mode": payment_mode,
+#                         "transaction_id": transaction_id,
+#                         "amount": total_amount,
+#                         "total_amount":grand_total,
+#                         "total_delivery_charge":total_delivery_charge,
+#                         "order_product_ids": order_product_ids,  
+#                         "category_ids": category_ids,  
+#                         "sub_category_ids": sub_category_ids, 
+#                         "product_order_id": product_order_id,
+#                         "invoice_number": new_invoice_number,
+#                         "product_ids": product_ids,
+#                         "status_code": 200
+#                     }, status=200)
+
+#             else:
+#                 OrderProducts.objects.filter(id__in=[order.id for order in order_list]).update(order_status="Failed")
+#                 return JsonResponse({"error": "Payment failed.", "razorpay_order_id": razorpay_order_id, "status_code": 400}, status=400)
+
+#         except razorpay.errors.SignatureVerificationError:
+#             OrderProducts.objects.filter(id__in=[order.id for order in order_list]).update(order_status="Failed")
+#             return JsonResponse({"error": "Signature verification failed.", "razorpay_order_id": razorpay_order_id, "status_code": 400}, status=400)
+#     except Exception as e:
+#         return JsonResponse({"error": str(e), "status_code": 500}, status=500)
+    
+
+
+razorpay_client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
 @csrf_exempt
 def create_razorpay_order(request):
-    if request.method == 'POST':
-        try:
-            data = json.loads(request.body.decode('utf-8'))
-            customer_id = data.get('customer_id')
-            order_products = data.get('order_products', [])
-
-            if not customer_id or not order_products:
-                return JsonResponse({"error": "customer_id and order_products are required.", "status_code": 400}, status=400)
-
-            try:
-                customer = CustomerRegisterDetails.objects.get(id=customer_id)
-            except CustomerRegisterDetails.DoesNotExist:
-                return JsonResponse({"error": "Customer not found.", "status_code": 404}, status=404)
-           
-            try:
-                address = CustomerAddress.objects.get(customer_id=customer_id, select_address=True)
-                address_id = address.id
-            except CustomerAddress.DoesNotExist:
-                return JsonResponse({
-                    "error": "No selected address found for the customer. Please select an address first.",
-                    "status_code": 404
-                }, status=404)
-
-            total_amount = Decimal('0.0')
-            total_delivery_charge = Decimal('0.0')
-            grand_total = Decimal('0.0')
-
-            valid_orders = []
-            order_ids = [] 
-            product_ids = [] 
-        
-            for item in order_products:
-                order_id = item.get('order_id')
-                product_id = item.get('product_id')
-
-                try:
-                    order = OrderProducts.objects.get(id=order_id, customer=customer, product_id=product_id)
-                    total_amount += Decimal(str(order.final_price))
-                    total_delivery_charge += Decimal(str(order.delivery_charge))
-                    grand_total=total_amount + total_delivery_charge
-                    order_ids.append(str(order.id))  
-                    product_ids.append(str(order.product.id)) 
-                    
-                    valid_orders.append({
-                        "order_id": order.id,
-                        "product_id": order.product.id,
-                        "product_name": order.product.product_name,
-                        "category": order.category,
-                        "sub_category": order.sub_category,
-                        "quantity": order.quantity,
-                        "amount": float(order.price),
-                        "total_price": order.final_price,
-                        "total_delivery_charge":total_delivery_charge,
-                        "order_status": order.order_status
-                    })
-                except OrderProducts.DoesNotExist:
-                    return JsonResponse({"error": f"Order ID {order_id} with Product ID {product_id} not found or does not belong to the customer.", "status_code": 404}, status=404)
-            if total_amount <= 0:
-                return JsonResponse({"error": "Total amount must be greater than zero.", "status_code": 400}, status=400)
-            product_order_id = f"OD{datetime.now().strftime('%Y%m%d%H%M%S')}{''.join(random.choices(string.ascii_uppercase + string.digits, k=4))}"
-            receipt_id = product_order_id
-            razorpay_order = razorpay_client.order.create({
-                "amount": int(grand_total * 100),
-                "currency": "INR",
-                "receipt": receipt_id,
-                "payment_capture": 1,
-                "notes": {  
-                    "order_ids": ",".join(order_ids), 
-                    "product_ids": ",".join(product_ids),  
-                    "customer_id": str(customer.id),
-                    "address_id": str(address_id) 
-                }
-            })          
-            callback_url = "settings.RAZORPAY_CALLBACK_URL"
-            return JsonResponse({
-                "message": "Razorpay Order Created Successfully!",
-                "razorpay_key": settings.RAZORPAY_KEY_ID,
-                "razorpay_order_id": razorpay_order["id"],
-                "callback_url": callback_url,
-                "customer_id": customer.id,
-                "address_id":address_id,
-                "total_amount": total_amount,
-                "orders": valid_orders,
-                "product_order_id":receipt_id,
-                "status_code": 201
-            }, status=201)
-        except Exception as e:
-            return JsonResponse({"error": str(e), "status_code": 500}, status=500)
-    return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
-@csrf_exempt
-def razorpay_callback(request):
-    if request.method != "POST":
+    if request.method != 'POST':
         return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
+
     try:
-        data = json.loads(request.body.decode("utf-8"))
-        required_fields = ["razorpay_payment_id", "razorpay_order_id", "razorpay_signature", "customer_id", "order_products","address_id","product_order_id"]
-        missing_fields = [field for field in required_fields if field not in data]
-        if missing_fields:
-            return JsonResponse({"error": f"Missing required fields: {', '.join(missing_fields)}", "status_code": 400}, status=400)
-        razorpay_payment_id = data["razorpay_payment_id"]
-        razorpay_order_id = data["razorpay_order_id"]
-        razorpay_signature = data["razorpay_signature"]
-        customer_id = data["customer_id"]
-        order_products = data["order_products"]
-        address_id =data["address_id"]
-        product_order_id = data["product_order_id"]
-        if not isinstance(order_products, list) or not order_products:
-            return JsonResponse({"error": "Invalid or missing order_products. It must be a list of order-product mappings.", "status_code": 400}, status=400)
-        client = razorpay.Client(auth=(settings.RAZORPAY_KEY_ID, settings.RAZORPAY_KEY_SECRET))
-        params = {
-            "razorpay_order_id": razorpay_order_id,
-            "razorpay_payment_id": razorpay_payment_id,
-            "razorpay_signature": razorpay_signature,
-        }
+        data = json.loads(request.body.decode('utf-8'))
+        customer_id = data.get('customer_id')
+        order_products = data.get('order_products', [])
+
+        if not customer_id or not order_products:
+            return JsonResponse({"error": "customer_id and order_products are required.", "status_code": 400}, status=400)
+
         try:
-            client.utility.verify_payment_signature(params)
-            payment_details = client.payment.fetch(razorpay_payment_id)
-            payment_status = payment_details.get("status", "failed")
-            payment_mode = payment_details.get("method", "unknown")
-            transaction_id = payment_details.get("id", razorpay_payment_id)
+            customer = CustomerRegisterDetails.objects.get(id=customer_id)
+        except CustomerRegisterDetails.DoesNotExist:
+            return JsonResponse({"error": "Customer not found.", "status_code": 404}, status=404)
+
+        try:
+            address = CustomerAddress.objects.get(customer_id=customer_id, select_address=True)
+        except CustomerAddress.DoesNotExist:
+            return JsonResponse({
+                "error": "No selected address found for the customer. Please select an address first.",
+                "status_code": 404
+            }, status=404)
+
+        # Step 1: Validate order items and collect orders
+        order_list = []
+        for item in order_products:
+            order_id = item.get("order_id")
+            product_id = item.get("product_id")
+
+            if not order_id or not product_id:
+                return JsonResponse({"error": "Each item in order_products must contain order_id and product_id.", "status_code": 400}, status=400)
+
+            order = OrderProducts.objects.filter(id=order_id, product_id=product_id, customer_id=customer_id).first()
+            if order:
+                order_list.append(order)
+
+        if not order_list:
+            return JsonResponse({"error": "No matching orders found for this payment.", "status_code": 404}, status=404)
+
+        # Step 2: Aggregate order details
+        order_product_ids = []
+        category_ids = []
+        sub_category_ids = []
+        product_ids = []
+        total_quantity = 0
+        total_amount = Decimal("0.00")
+        total_delivery_charge = Decimal("0.00")
+        first_order = None
+
+        for order in order_list:
+            product = order.product
+            if not first_order:
+                first_order = order
+
+            order_product_ids.append(order.id)
+            category_ids.append(product.category.id)
+            sub_category_ids.append(product.sub_category.id)
+            product_ids.append(product.id)
+
+            total_quantity += order.quantity
+            total_amount += Decimal(str(order.final_price))
+            total_delivery_charge += Decimal(str(order.delivery_charge))
+        print(total_quantity, "total_quantity")
+        grand_total = total_amount + total_delivery_charge
+
+        if grand_total <= 0:
+            return JsonResponse({"error": "Total amount must be greater than zero.", "status_code": 400}, status=400)
+
+        # Step 3: Create Razorpay order
+        product_order_id = f"OD{datetime.now().strftime('%Y%m%d%H%M%S')}{''.join(random.choices(string.ascii_uppercase + string.digits, k=4))}"
+        receipt_id = product_order_id
+
+        razorpay_order = razorpay_client.order.create({
+            "amount": int(grand_total * 100),
+            "currency": "INR",
+            "receipt": receipt_id,
+            "payment_capture": 1,
+            "notes": {
+                "order_ids": ",".join(map(str, order_product_ids)),
+                "product_ids": ",".join(map(str, product_ids)),
+                "customer_id": str(customer.id),
+                "address_id": str(address.id),
+            }
+        })
+
+        # Step 4: Save to PaymentDetails
+        PaymentDetails.objects.create(
+            admin=first_order.product.admin if first_order else None,
+            customer=customer,
+            customer_address=address,
+            category_ids=category_ids,
+            sub_category_ids=sub_category_ids,
+            product_ids=product_ids,
+            order_product_ids=order_product_ids,
+            razorpay_order_id=razorpay_order["id"],
+            amount=total_amount,
+            total_amount=grand_total,
+            payment_type="online",
+            payment_status="created",
+            payment_mode="unknown",
+            quantity=total_quantity,
+            product_order_id=product_order_id,
+        )
+
+        return JsonResponse({
+            "message": "Razorpay Order Created Successfully!",
+            "razorpay_key": settings.RAZORPAY_KEY_ID,
+            "razorpay_order_id": razorpay_order["id"],
+            "customer_id": customer.id,
+            "customer_name": f"{customer.first_name} {customer.last_name}",
+            "email": customer.email,
+            "mobile_no": customer.mobile_no,
+            "address_id": address.id,
+            "total_amount": str(grand_total),
+            "product_order_id": receipt_id,
+            "status_code": 201
+        }, status=201)
+
+    except Exception as e:
+        return JsonResponse({"error": str(e), "status_code": 500}, status=500)
+import hmac
+import hashlib
+import json
+
+from razorpay import Client
+import hmac
+import hashlib
+
+import traceback
+from django.db import transaction
+
+@csrf_exempt
+def razorpay_webhook(request):
+    if request.method != "POST":
+        return JsonResponse({"error": "Only POST allowed"}, status=405)
+
+    try:
+        payload = request.body
+        received_signature = request.META.get("HTTP_X_RAZORPAY_SIGNATURE")
+        webhook_secret = "dronekits@pavaman@24/07/2025"  # ✅ Your actual webhook secret
+        generated_signature = hmac.new(
+            webhook_secret.encode('utf-8'),
+            msg=payload,
+            digestmod=hashlib.sha256
+        ).hexdigest()
+
+        if not hmac.compare_digest(received_signature, generated_signature):
+            return HttpResponseBadRequest("Invalid signature")
+
+        data = json.loads(payload)
+
+        payment_entity = data.get("payload", {}).get("payment", {}).get("entity", {})
+        razorpay_order_id = payment_entity.get("order_id")
+        razorpay_payment_id = payment_entity.get("id")
+        status = payment_entity.get("status")
+        payment_mode = payment_entity.get("method")
+
+        if not razorpay_order_id:
+            return JsonResponse({"error": "Invalid payload"}, status=400)
+        payment = PaymentDetails.objects.filter(razorpay_order_id=razorpay_order_id).first()
+
+        if not payment:
+            return JsonResponse({"error": "Payment record not found"}, status=404)
+
+        if payment.payment_status == "captured":
+            return JsonResponse({"status": "Already processed"}, status=200)
+
+        with transaction.atomic():
+            payment.razorpay_payment_id = razorpay_payment_id
+            payment.payment_status = status
+            payment.payment_mode = payment_mode
+            payment.transaction_id = razorpay_payment_id
+            payment.save()
             order_list = []
-            for item in order_products:
-                order_id = item.get("order_id")
-                product_id = item.get("product_id")
-                if not order_id or not product_id:
-                    return JsonResponse({"error": "Each item in order_products must contain order_id and product_id.", "status_code": 400}, status=400)
-                order = OrderProducts.objects.filter(id=order_id, product_id=product_id, customer_id=customer_id).first()
-                if order:
-                    order_list.append(order)
-            if not order_list:
-                return JsonResponse({"error": "No matching orders found for this payment.", "status_code": 404}, status=404)
-            if payment_status == "captured":
-                order_product_ids = []
-                category_ids = []
-                sub_category_ids = []
-                product_ids = []
-                total_quantity = 0
-                total_amount = Decimal("0.00")
-                total_delivery_charge = Decimal("0.00")
-                grand_total=0
-                first_order = None
+            if status == "captured":
+                order_ids_raw = payment.order_product_ids
+                order_ids = []
+
+                if isinstance(order_ids_raw, list):
+                    order_ids = order_ids_raw
+                elif isinstance(order_ids_raw, str):
+                    order_ids = [int(x) for x in order_ids_raw.split(",") if x.strip().isdigit()]
+
+                order_list = OrderProducts.objects.filter(id__in=order_ids)
+
                 for order in order_list:
-                    order.order_status = "Paid"
-                    order.save(update_fields=["order_status"])
-                    product = order.product
-                    if product.quantity >= order.quantity:
-                        product.quantity -= order.quantity
-                    else:
-                        product.quantity = 0  
-                    if product.quantity<= 10 and product.quantity!=0 and product.quantity<0:
-                       product.availability= "Very Few Products Left"
-                    elif product.quantity== 0:
-                       product.availability= "Out of Stock"
-                    else:
-                       product.availability="In Stock"
-                    product.save(update_fields=["quantity","availability"])
-                    if not first_order:
-                        first_order = order
-                    order_product_ids.append(order.id)
-                    category_ids.append(order.product.category.id)
-                    sub_category_ids.append(order.product.sub_category.id)
-                    product_ids.append(order.product.id)
-                    total_quantity += order.quantity
-                    total_amount += Decimal(str(order.final_price))
-                    total_delivery_charge += Decimal(str(order.delivery_charge))
-                    grand_total =total_amount+ total_delivery_charge
-                try:
-                    customer_address = CustomerAddress.objects.get(id=address_id, customer_id=customer_id)
-                except CustomerAddress.DoesNotExist:
-                    return JsonResponse({
-                        "error": "Invalid address_id. No such address found for this customer.",
-                        "status_code": 404
-                    }, status=404)
-                if first_order:
+                    if order.order_status != "Paid":
+                        order.order_status = "Paid"
+                        order.save()
+
+                        product = order.product
+                        if product.quantity >= order.quantity:
+                            product.quantity -= order.quantity
+                        else:
+                            product.quantity = 0
+
+                        if product.quantity == 0:
+                            product.availability = "Out of Stock"
+                        elif product.quantity <= 10:
+                            product.availability = "Very Few Products Left"
+                        else:
+                            product.availability = "In Stock"
+
+                        product.save()
+                if not payment.invoice_number:
                     today = timezone.now().date()
                     date_str = today.strftime("%d%m%Y")
                     prefix = "PVM"
                     base_invoice = f"{prefix}{date_str}"
-                    latest_invoice = PaymentDetails.objects.filter(created_at__date=today).order_by('-id').first()
+
+                    latest_invoice = PaymentDetails.objects.filter(
+                        created_at__date=today,
+                        invoice_number__startswith=base_invoice
+                    ).exclude(invoice_number=None).order_by('-invoice_number').first()
+
                     if latest_invoice and latest_invoice.invoice_number:
-                       last_serial = int(latest_invoice.invoice_number[-4:])
+                        last_serial = int(latest_invoice.invoice_number[-4:])
                     else:
                         last_serial = 0
+
                     new_serial = last_serial + 1
                     new_invoice_number = f"{base_invoice}{str(new_serial).zfill(4)}"
-                    PaymentDetails.objects.create(
-                        admin=first_order.product.admin,
-                        customer=first_order.customer,
-                        customer_address=customer_address,
-                        category_ids=category_ids,
-                        sub_category_ids=sub_category_ids,
-                        product_ids=product_ids,
-                        order_product_ids=order_product_ids,
-                        razorpay_order_id=razorpay_order_id,
-                        razorpay_payment_id=razorpay_payment_id,
-                        razorpay_signature=razorpay_signature,
-                        amount=total_amount,
-                        total_amount=grand_total,
-                        payment_type="online",
-                        payment_mode=payment_mode,
-                        transaction_id=transaction_id,
-                        quantity=total_quantity,
-                        product_order_id= product_order_id, 
-                        invoice_number=new_invoice_number,
-                    )
-                    current_paid_product_ids = [order.product_id for order in order_list]
+                    payment.invoice_number = new_invoice_number
+                    payment.save()
+
+            payment.save()
+
+            if status == "captured" and order_list:
+                current_paid_product_ids = [order.product_id for order in order_list]
+                customer_id = payment.customer_id if hasattr(payment, 'customer_id') else payment.customer.id if hasattr(payment, 'customer') else None
+                if customer_id:
                     CartProducts.objects.filter(
                         product_id__in=current_paid_product_ids,
                         customer_id=customer_id
                     ).delete()
-                    product_list = []
-                    for order in order_list:
-                        try:
-                            product_details = ProductsDetails.objects.get(id=order.product.id)
-                            image_path = product_details.product_images[0] if isinstance(product_details.product_images, list) and product_details.product_images else None
-                            image_url = f"{settings.AWS_S3_BUCKET_URL}/{image_path}" if image_path else ""
-                            product_name = product_details.product_name
-                        except ProductsDetails.DoesNotExist:
-                            image_url = ""
-                            product_name = "Product Not Found"
-                        product_list.append({
-                            "image_url": image_url,
-                            "name": product_name,
-                            "quantity": order.quantity,
-                            "price": order.final_price,
-                        })
+                first_order = order_list[0]
+                grand_total = sum(order.final_price for order in order_list)
+                product_order_id = payment.product_order_id
+                transaction_id = payment.transaction_id
+
+                product_list = []
+                for order in order_list:
+                    try:
+                        product_details = ProductsDetails.objects.get(id=order.product.id)
+                        image_path = product_details.product_images[0] if isinstance(product_details.product_images, list) and product_details.product_images else None
+                        image_url = f"{settings.AWS_S3_BUCKET_URL}/{image_path}" if image_path else ""
+                        product_name = product_details.product_name
+                    except ProductsDetails.DoesNotExist:
+                        image_url = ""
+                        product_name = "Product Not Found"
+
+                    product_list.append({
+                        "image_url": image_url,
+                        "name": product_name,
+                        "quantity": order.quantity,
+                        "price": order.final_price,
+                    })
+
+                try:
                     send_html_order_confirmation(
                         to_email=first_order.customer.email,
                         customer_name=f"{first_order.customer.first_name} {first_order.customer.last_name}",
@@ -2301,43 +2612,23 @@ def razorpay_callback(request):
                         total_amount=grand_total,
                         order_id=product_order_id,
                         transaction_id=transaction_id,
-                    )                    
-                    mobile_number = first_order.customer.mobile_no
-                    order_id = product_order_id
-                    amount = grand_total
+                    )
+                except Exception as e:
+                    pass
 
-                    try:
-                        send_order_confirmation_sms([mobile_number], order_id, amount)
-                    except Exception as e:
-                        print(f"SMS send failed: {str(e)}")
-                    return JsonResponse({
-                        "message": "Payment successful for all orders!",
-                        "razorpay_order_id": razorpay_order_id,
-                        "customer_id": customer_id,
-                        "total_orders_paid": len(order_product_ids),
-                        "payment_mode": payment_mode,
-                        "transaction_id": transaction_id,
-                        "amount": total_amount,
-                        "total_amount":grand_total,
-                        "total_delivery_charge":total_delivery_charge,
-                        "order_product_ids": order_product_ids,  
-                        "category_ids": category_ids,  
-                        "sub_category_ids": sub_category_ids, 
-                        "product_order_id": product_order_id,
-                        "invoice_number": new_invoice_number,
-                        "product_ids": product_ids,
-                        "status_code": 200
-                    }, status=200)
+                try:
+                    send_order_confirmation_sms(
+                        [first_order.customer.mobile_no],
+                        product_order_id,
+                        grand_total
+                    )
+                except Exception as e:
+                    pass
 
-            else:
-                OrderProducts.objects.filter(id__in=[order.id for order in order_list]).update(order_status="Failed")
-                return JsonResponse({"error": "Payment failed.", "razorpay_order_id": razorpay_order_id, "status_code": 400}, status=400)
+        return JsonResponse({"status": "Webhook handled successfully"}, status=200)
 
-        except razorpay.errors.SignatureVerificationError:
-            OrderProducts.objects.filter(id__in=[order.id for order in order_list]).update(order_status="Failed")
-            return JsonResponse({"error": "Signature verification failed.", "razorpay_order_id": razorpay_order_id, "status_code": 400}, status=400)
     except Exception as e:
-        return JsonResponse({"error": str(e), "status_code": 500}, status=500)
+        return JsonResponse({"error": str(e)}, status=500)
     
 def send_html_order_confirmation(to_email, customer_name, product_list, total_amount, order_id, transaction_id):
     subject = "[Pavaman] Order Confirmation - Payment Received"
