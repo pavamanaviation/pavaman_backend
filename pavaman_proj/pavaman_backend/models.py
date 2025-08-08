@@ -77,13 +77,11 @@ class CustomerRegisterDetails(models.Model):
             self.password = make_password(self.password)
         super().save(*args, **kwargs)
     def is_otp_valid(self):
-        """Check if OTP is still valid (within 5 minutes)."""
         if self.changed_on:
             expiry_time = self.changed_on + timedelta(minutes=5)
             return timezone.now() < expiry_time
         return False
     def clear_expired_otp(self):
-        """Set OTP and reset_link to NULL if expired."""
         if not self.is_otp_valid():
             self.otp = None
             self.reset_link = None

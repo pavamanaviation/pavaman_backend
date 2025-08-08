@@ -24,6 +24,8 @@ from botocore.exceptions import ClientError
 from email.mime.image import MIMEImage
 from dateutil.relativedelta import relativedelta
 import razorpay
+
+from pavaman_backend.indiantime import format_datetime_ist
 from .models import (
     CustomerRegisterDetails, PavamanAdminDetails, CategoryDetails, ProductsDetails,
     SubCategoryDetails, CartProducts, CustomerAddress, OrderProducts,
@@ -92,7 +94,6 @@ def customer_register(request):
             admin = PavamanAdminDetails.objects.order_by('id').first()
             if not admin:
                 return JsonResponse({"error": "No admin found in the system.", "status_code": 500}, status=500)            
-            current_time = datetime.utcnow() + timedelta(hours=5, minutes=30)
             customer = CustomerRegisterDetails(
                 first_name=first_name,
                 last_name=last_name,
@@ -101,7 +102,6 @@ def customer_register(request):
                 password=make_password(password),
                 status=int(status),
                 register_status=int(register_status),
-                created_on=current_time,
                 admin=admin,
                 verification_link=verification_link,
                 register_type="Mannual"
@@ -515,7 +515,7 @@ def send_password_reset_otp_email(customer):
             </p>
 
             <p style="color: #555; margin-bottom: 30px;">
-                Use the OTP below to reset your password. This OTP is valid for 2 minutes.
+                Use the OTP below to reset your password. This OTP is valid for 5 minutes.
             </p>
           
             <p class="otp" style="font-size: 28px; font-weight: bold; color: #4450A2; background: #f2f2f2; display: block; padding: 12px 24px; border-radius: 10px; letter-spacing: 4px; width: fit-content; margin: 0 auto;">
@@ -2923,7 +2923,7 @@ def filter_my_order(request):
                 "payment_mode": payment.payment_mode,
                 "total_quantity": payment.quantity,
                 "total_amount": payment.total_amount,
-                "payment_date": payment.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                "payment_date": format_datetime_ist(payment.created_at),
                 "time_filters": year_options,
                 "product_order_id": payment.product_order_id,
                 "customer_address": address_data,
@@ -3022,7 +3022,7 @@ def build_payment_response(payment, order_product_map, products_map, address_map
         "payment_mode": payment.payment_mode,
         "total_quantity": payment.quantity,
         "total_amount": payment.total_amount,
-        "payment_date": payment.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+        "payment_date": format_datetime_ist(payment.created_at),
         "product_order_id": payment.product_order_id,
         "customer_address": address_data,
         "order_products": order_product_list
@@ -4156,7 +4156,6 @@ def submit_feedback_rating(request):
                     "error": "Feedback already submitted for this product and order.",
                     "status_code": 400
                 }, status=400)
-            current_time = datetime.utcnow() + timedelta(hours=5, minutes=30)
             FeedbackRating.objects.create(
                 admin=admin,
                 customer=customer,
@@ -4168,14 +4167,13 @@ def submit_feedback_rating(request):
                 sub_category=product.sub_category if product.sub_category else "",
                 rating=rating if rating else None,
                 feedback=feedback,
-                created_at=current_time
             )
 
             return JsonResponse({
                 "message": "Feedback submitted successfully.",
                 "status_code": 201,
                 "customer_id":customer_id,
-                "submitted_at": current_time
+                "submitted_at": format_datetime_ist(now()),
             }, status=201)
 
         except json.JSONDecodeError:

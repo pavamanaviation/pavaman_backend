@@ -21,6 +21,8 @@ from django.db.models.functions import TruncMonth
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from openpyxl import Workbook
+
+from pavaman_backend.indiantime import format_datetime_ist
 from .msg91 import send_verify_mobile
 from pavaman_backend.models import (
     CustomerRegisterDetails, PavamanAdminDetails, CategoryDetails,
@@ -1649,7 +1651,7 @@ def download_discount_products_excel(request):
                     product.availability,
                     product.category.category_name if product.category else '',
                     product.sub_category.sub_category_name if product.sub_category else '',
-                    product.created_at.strftime('%Y-%m-%d %H:%M:%S') if product.created_at else ''
+                    format_datetime_ist(product.created_at) if product.created_at else ''
                 ])
             buffer = BytesIO()
             wb.save(buffer)
@@ -1859,8 +1861,7 @@ def retrieve_feedback(request):
                         "rating": feedback.rating,
                         "feedback": feedback.feedback,
                         "order_id": feedback.order_id,
-                        "created_at": feedback.created_at.strftime("%Y-%m-%d %H:%M:%S"),
-                    })
+                        "created_at": format_datetime_ist(feedback.created_at),                    })
                 except CustomerRegisterDetails.DoesNotExist:
                     continue
             return JsonResponse({
@@ -2078,7 +2079,7 @@ def download_feedback_excel(request):
                         feedback.rating,
                         feedback.feedback,
                         feedback.order_id,
-                        feedback.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+                        format_datetime_ist(feedback.created_at),
                         image_url or "",
                     ])
                 except (CustomerRegisterDetails.DoesNotExist, ProductsDetails.DoesNotExist):
