@@ -27,7 +27,7 @@ from pavaman_backend.views import (add_admin,admin_login,admin_logout,
     monthly_product_orders,download_feedback_excel,download_average_rating_excel,
     product_discount_inventory_view,download_inventory_products_excel,upload_products_excel
     )
-from pavaman_backend.customer_views import (customer_register,customer_login,view_categories_and_discounted_products,
+from pavaman_backend.customer_views import (customer_register,customer_login, remove_from_wishlist,view_categories_and_discounted_products,
     view_sub_categories_and_discounted_products,
     view_products_details,add_product_to_cart,view_product_cart,delete_product_cart,delete_selected_products_cart,add_customer_address,
     view_customer_address,edit_customer_address,delete_customer_address,order_multiple_products,multiple_order_summary
@@ -144,5 +144,5 @@ urlpatterns = [
     path('view-products-by-category-and-subcategory',view_products_by_category_and_subcategory,name='view_products_by_category_and_subcategory'),
     path('share-preview/<int:product_id>/',share_product_preview,name='share_product_preview'),
     path('razorpay-webhook/', razorpay_webhook, name='razorpay_webhook'),
-
+    path('remove-wishlist',remove_from_wishlist,name='remove_from_wishlist')
 ]+ static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

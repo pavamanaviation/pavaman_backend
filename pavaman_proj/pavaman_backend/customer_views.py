@@ -1541,6 +1541,7 @@ def delete_customer_address(request):
             return JsonResponse({"error": f"An unexpected error occurred: {str(e)}", "status_code": 500}, status=500)
 
     return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
+
 @csrf_exempt
 def order_multiple_products(request):
     if request.method == 'POST':
@@ -1640,6 +1641,7 @@ def order_multiple_products(request):
         except Exception as e:
             return JsonResponse({"error": str(e), "status_code": 500}, status=500)
     return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
+
 @csrf_exempt
 def multiple_order_summary(request):
     if request.method == 'POST':
@@ -1877,7 +1879,6 @@ def create_razorpay_order(request):
             }
         })
 
-        # Step 4: Save to PaymentDetails
         PaymentDetails.objects.create(
             admin=first_order.product.admin if first_order else None,
             customer=customer,
@@ -1917,7 +1918,6 @@ def create_razorpay_order(request):
 def razorpay_webhook(request):
     if request.method != "POST":
         return JsonResponse({"error": "Only POST allowed"}, status=405)
-
     try:
         payload = request.body
         received_signature = request.META.get("HTTP_X_RAZORPAY_SIGNATURE")
@@ -1927,12 +1927,9 @@ def razorpay_webhook(request):
             msg=payload,
             digestmod=hashlib.sha256
         ).hexdigest()
-
         if not hmac.compare_digest(received_signature, generated_signature):
             return HttpResponseBadRequest("Invalid signature")
-
         data = json.loads(payload)
-
         payment_entity = data.get("payload", {}).get("payment", {}).get("entity", {})
         razorpay_order_id = payment_entity.get("order_id")
         razorpay_payment_id = payment_entity.get("id")
@@ -1956,7 +1953,7 @@ def razorpay_webhook(request):
             payment.transaction_id = razorpay_payment_id
             payment.save()
             order_list = []
-            if status == "captured":
+            if status in ["captured", "authorized"]:
                 order_ids_raw = payment.order_product_ids
                 order_ids = []
 
@@ -2009,7 +2006,7 @@ def razorpay_webhook(request):
 
             payment.save()
 
-            if status == "captured" and order_list:
+            if status in ["captured", "authorized"] and order_list:
                 current_paid_product_ids = [order.product_id for order in order_list]
                 customer_id = payment.customer_id if hasattr(payment, 'customer_id') else payment.customer.id if hasattr(payment, 'customer') else None
                 if customer_id:
@@ -2303,7 +2300,6 @@ def filter_and_sort_products_each_subcategory(request):
             return JsonResponse({"error": str(e), "status_code": 500}, status=500)
 
     return JsonResponse({"error": "Invalid request method.", "status_code": 405}, status=405)
-
 @csrf_exempt
 def filter_product_price_each_category(request):
     if request.method == "POST":
@@ -2346,6 +2342,7 @@ def filter_product_price_each_category(request):
                     products_query = products_query.filter(discounted_price__gte=min_price)
                 if max_price is not None:
                     products_query = products_query.filter(discounted_price__lte=max_price)
+
                 wishlist_product_ids = get_wishlist_product_ids(customer_id)
                 products_list = []
                 for product in products_query:
@@ -2368,8 +2365,7 @@ def filter_product_price_each_category(request):
                         "quantity": product.quantity,
                         "product_image_url": image_url,
                         "cart_status": product.cart_status,
-                        "wishlist_status": product.id in wishlist_product_ids
-                        
+                        "wishlist_status": product.id in wishlist_product_ids                        
                     }
                     products_list.append(product_data)
 
@@ -2420,7 +2416,6 @@ def filter_product_price_each_category(request):
                 "all_categories": all_categories_with_subs,
                 "status_code": 200
             }
-
             if customer_id:
                 response_data["customer_id"] = customer_id
 
@@ -2763,6 +2758,7 @@ def customer_search_products(request):
             return JsonResponse({"error": f"An unexpected error occurred: {str(e)}", "status_code": 500}, status=500)
 
     return JsonResponse({"error": "Invalid HTTP method. Only POST is allowed.", "status_code": 405}, status=405)
+
 @csrf_exempt
 def get_payment_details_by_order(request):
     if request.method != "POST":
@@ -2771,93 +2767,37 @@ def get_payment_details_by_order(request):
     try:
         data = json.loads(request.body.decode("utf-8"))
         admin_id = data.get('admin_id')
-       
+
         if not admin_id:
-                return JsonResponse({"error": "admin_id is required.", "status_code": 400}, status=400)
-     
-        payments = PaymentDetails.objects.filter(admin_id=admin_id).order_by('-created_at')
+            return JsonResponse({"error": "admin_id is required.", "status_code": 400}, status=400)
+
+        payments = PaymentDetails.objects.filter(admin_id=admin_id).select_related('customer').order_by('-created_at')
         if not payments.exists():
             return JsonResponse({"error": "No payment details found on this admin.", "status_code": 404}, status=404)
 
-        payment_list = []
-        for payment in payments:
-            order_ids = payment.order_product_ids
-            
-            order_products = OrderProducts.objects.filter(id__in=order_ids)
-            
-            order_product_list = []
-            for order in order_products:
-                product = ProductsDetails.objects.filter(id=order.product_id).first()
-                if product and product.product_images:
-                   product_image_path = product.product_images[0].replace('\\', '/')
-                   product_image_url = f"{settings.AWS_S3_BUCKET_URL}/{product_image_path}"
+        all_order_ids = [oid for p in payments for oid in p.order_product_ids]
+        order_products = OrderProducts.objects.filter(id__in=all_order_ids)
+        product_ids = list(order_products.values_list('product_id', flat=True))
+        address_ids = list(set(p.customer_address_id for p in payments if p.customer_address_id))
 
-                else:
-                   product_image_url = ""
-                
-                order_product_list.append({
-                    "id": order.id,
-                    "quantity": order.quantity,
-                    "price": order.price,
-                    "gst": f"{int(product.gst or 0)}%",
-                    "discount":f"{int(product.discount)}%" if product.discount else "0%",
-                    "final_price": "{:.2f}".format(float(product.price) - (float(product.price) * float(product.discount or 0) / 100)),
-                    "order_status": order.order_status,
-                    "product_id": order.product_id,
-                    "product_image": product_image_url,
-                    "product_name":product.product_name,
-                    "shipping_status":order.shipping_status,
-                    "delivery_status":order.delivery_status,
-                    "payment_status": get_display_payment_status(payment.payment_status),
-                    
-                })
+        order_product_map = {op.id: op for op in order_products}
+        products_map = ProductsDetails.objects.in_bulk(product_ids)
+        address_map = CustomerAddress.objects.in_bulk(address_ids)
 
-            address_data = []
-            if payment.customer_address_id:
-                address_obj = CustomerAddress.objects.filter(id=payment.customer_address_id).first()
-                if address_obj:
-                    address_data.append({
-                        "address_id": address_obj.id,
-                        "customer_name": f"{address_obj.first_name} {address_obj.last_name}",
-                        "email": address_obj.email,
-                        "mobile_number": address_obj.mobile_number,
-                        "alternate_mobile": address_obj.alternate_mobile,
-                        "address_type": address_obj.address_type,
-                        "pincode": address_obj.pincode,
-                        "street": address_obj.street,
-                        "landmark": address_obj.landmark,
-                        "village": address_obj.village,
-                        "mandal": address_obj.mandal,
-                        "postoffice": address_obj.postoffice,
-                        "district": address_obj.district,
-                        "state": address_obj.state,
-                        "country": address_obj.country,
-                        
-                    })
-                    
-            payment_list.append({
-                "razorpay_order_id": payment.razorpay_order_id,
-                "customer_name": f"{payment.customer.first_name} {payment.customer.last_name}",
-                "customer_id":payment.customer_id,
-                "email": payment.customer.email,
-                "mobile_number": payment.customer.mobile_no,
-                "payment_mode": payment.payment_mode,
-                "total_quantity":payment.quantity,
-                "total_amount": payment.total_amount,
-                "payment_date": payment.created_at.strftime("%Y-%m-%d %H:%M:%S"),
-                "product_order_id":payment.product_order_id,
-                "customer_address": address_data,
-                "order_products": order_product_list
-            })
+        payment_list = [
+            build_payment_response(payment, order_product_map, products_map, address_map)
+            for payment in payments
+        ]
+        payment_list = [p for p in payment_list if p]
+
         response_data = {
             "message": "Placed Order retrieved successfully.",
             "payments": payment_list,
-            "status_code": 200
+            "status_code": 200,
+            "admin_id": str(admin_id)
         }
+        return JsonResponse(response_data, status=200)
 
-        if admin_id:
-            response_data["admin_id"] = str(admin_id)
-        return JsonResponse(response_data, status=200)    
     except Exception as e:
         return JsonResponse({"error": str(e), "status_code": 500}, status=500)
 
@@ -2871,8 +2811,6 @@ def filter_my_order(request):
         customer_id = data.get('customer_id')
         delivery_status_filter = data.get('delivery_status')
         shipping_status_filter = data.get('shipping_status') 
-        delivery_status_filter = data.get('delivery_status')
-        shipping_status_filter = data.get('shipping_status')
         order_time_filter = data.get('order_time')
 
         if shipping_status_filter and delivery_status_filter:
@@ -2884,8 +2822,7 @@ def filter_my_order(request):
         if not customer_id:
             return JsonResponse({"error": "customer_id is required.", "status_code": 400}, status=400)
 
-        payments = PaymentDetails.objects.filter(customer_id=customer_id)
-
+        payments = PaymentDetails.objects.filter(customer_id=customer_id).select_related('customer')
         available_years = payments.dates('created_at', 'year', order='DESC')
         year_options = ["Last 30 days"] + [dt.year for dt in available_years if dt.year >= datetime.now().year - 3] + ["Older"]
 
@@ -2899,31 +2836,42 @@ def filter_my_order(request):
                 payments = payments.filter(created_at__year=int(order_time_filter))
 
         payments = payments.order_by('-created_at')
-
         if not payments.exists():
             return JsonResponse({"error": "No order details found.", "status_code": 404}, status=404)
+        all_order_ids = [oid for p in payments for oid in p.order_product_ids]
+        order_products = OrderProducts.objects.filter(id__in=all_order_ids)
+        product_ids = list(order_products.values_list('product_id', flat=True))
+        products_map = ProductsDetails.objects.in_bulk(product_ids)
+        order_product_map = {op.id: op for op in order_products}
+        address_ids = list(set(p.customer_address_id for p in payments if p.customer_address_id))
+        address_map = CustomerAddress.objects.in_bulk(address_ids)
 
         payment_list = []
         total_matched_order_products = 0
 
         for payment in payments:
             order_ids = payment.order_product_ids
-            order_products = OrderProducts.objects.filter(id__in=order_ids)
-            if delivery_status_filter:
-                order_products = order_products.filter(delivery_status=delivery_status_filter)
+            orders = [order_product_map.get(oid) for oid in order_ids if order_product_map.get(oid)]
+            if delivery_status_filter == "Delivered":
+                orders = [
+                    o for o in orders 
+                    if o.delivery_status == "Delivered" and o.shipping_status and o.delivery_status
+                ]
             elif shipping_status_filter == "Shipped":
-                order_products = order_products.filter(
-                    shipping_status="Shipped"
-                ).exclude(delivery_status="Delivered")
-
+                orders = [
+                    o for o in orders 
+                    if o.shipping_status == "Shipped" and not o.delivery_status
+               ]
             order_product_list = []
-            for order in order_products:
-                product = ProductsDetails.objects.filter(id=order.product_id).first()
-                if product and product.product_images:
+            for order in orders:
+                product = products_map.get(order.product_id)
+                if not product:
+                    continue
+
+                product_image_url = ""
+                if product.product_images:
                     product_image_path = product.product_images[0].replace('\\', '/')
                     product_image_url = f"{settings.AWS_S3_BUCKET_URL}/{product_image_path.lstrip('/')}"
-                else:
-                    product_image_url = ""
 
                 order_product_list.append({
                     "order_product_id": order.id,
@@ -2938,7 +2886,7 @@ def filter_my_order(request):
                     "product_id": order.product_id,
                     "product_image": product_image_url,
                     "product_name": product.product_name,
-                    "delivery_charge":order.delivery_charge
+                    "delivery_charge": order.delivery_charge
                 })
 
             if order_product_list:
@@ -2948,26 +2896,25 @@ def filter_my_order(request):
                     continue
 
             address_data = []
-            if payment.customer_address_id:
-                address_obj = CustomerAddress.objects.filter(id=payment.customer_address_id).first()
-                if address_obj:
-                    address_data.append({
-                        "address_id": address_obj.id,
-                        "customer_name": f"{address_obj.first_name} {address_obj.last_name}",
-                        "email": address_obj.email,
-                        "mobile_number": address_obj.mobile_number,
-                        "alternate_mobile": address_obj.alternate_mobile,
-                        "address_type": address_obj.address_type,
-                        "pincode": address_obj.pincode,
-                        "street": address_obj.street,
-                        "landmark": address_obj.landmark,
-                        "village": address_obj.village,
-                        "mandal": address_obj.mandal,
-                        "postoffice": address_obj.postoffice,
-                        "district": address_obj.district,
-                        "state": address_obj.state,
-                        "country": address_obj.country,
-                    })
+            address_obj = address_map.get(payment.customer_address_id)
+            if address_obj:
+                address_data.append({
+                    "address_id": address_obj.id,
+                    "customer_name": f"{address_obj.first_name} {address_obj.last_name}",
+                    "email": address_obj.email,
+                    "mobile_number": address_obj.mobile_number,
+                    "alternate_mobile": address_obj.alternate_mobile,
+                    "address_type": address_obj.address_type,
+                    "pincode": address_obj.pincode,
+                    "street": address_obj.street,
+                    "landmark": address_obj.landmark,
+                    "village": address_obj.village,
+                    "mandal": address_obj.mandal,
+                    "postoffice": address_obj.postoffice,
+                    "district": address_obj.district,
+                    "state": address_obj.state,
+                    "country": address_obj.country,
+                })
 
             payment_list.append({
                 "customer_name": f"{payment.customer.first_name} {payment.customer.last_name}",
@@ -2982,7 +2929,6 @@ def filter_my_order(request):
                 "customer_address": address_data,
                 "order_products": order_product_list,
                 "payment_status": get_display_payment_status(payment.payment_status),
-
             })
 
         if (delivery_status_filter or shipping_status_filter) and total_matched_order_products == 0:
@@ -3004,7 +2950,83 @@ def filter_my_order(request):
 
     except Exception as e:
         return JsonResponse({"error": str(e), "status_code": 500}, status=500)
+    
+def build_payment_response(payment, order_product_map, products_map, address_map, action=None, search_product_name=None):
+    order_product_list = []
 
+    for op_id in payment.order_product_ids:
+        order = order_product_map.get(op_id)
+        if not order:
+            continue
+
+        product = products_map.get(order.product_id)
+        if not product:
+            continue
+
+        if action == 'search' and search_product_name:
+            if search_product_name.lower() not in product.product_name.lower():
+                continue
+
+        product_image_url = ""
+        if product.product_images:
+            image_path = product.product_images[0].replace('\\', '/')
+            product_image_url = f"{settings.AWS_S3_BUCKET_URL}/{image_path.lstrip('/')}"
+
+        order_product_list.append({
+            "order_product_id": order.id,
+            "quantity": order.quantity,
+            "price": order.price,
+            "gst": f"{int(product.gst or 0)}%",
+            "discount": f"{int(product.discount)}%" if product.discount else "0%",
+            "final_price": round(float(product.price) - (float(product.price) * float(product.discount or 0) / 100), 2),
+            "order_status": order.order_status,
+            "shipping_status": order.shipping_status,
+            "delivery_status": order.delivery_status,
+            "delivery_charge": order.delivery_charge,
+            "product_id": order.product_id,
+            "product_image": product_image_url,
+            "product_name": product.product_name,
+            "payment_status": get_display_payment_status(payment.payment_status),
+        })
+
+    if action == 'search' and not order_product_list:
+        return None
+
+    address_data = []
+    address = address_map.get(payment.customer_address_id)
+    if address:
+        address_data.append({
+            "address_id": address.id,
+            "customer_name": f"{address.first_name} {address.last_name}",
+            "email": address.email,
+            "mobile_number": address.mobile_number,
+            "alternate_mobile": address.alternate_mobile,
+            "address_type": address.address_type,
+            "pincode": address.pincode,
+            "street": address.street,
+            "landmark": address.landmark,
+            "village": address.village,
+            "mandal": address.mandal,
+            "postoffice": address.postoffice,
+            "district": address.district,
+            "state": address.state,
+            "country": address.country,
+        })
+
+    return {
+        "razorpay_order_id": payment.razorpay_order_id,
+        "customer_name": f"{payment.customer.first_name} {payment.customer.last_name}",
+        "customer_id": payment.customer_id,
+        "email": payment.customer.email,
+        "mobile_number": payment.customer.mobile_no,
+        "payment_mode": payment.payment_mode,
+        "total_quantity": payment.quantity,
+        "total_amount": payment.total_amount,
+        "payment_date": payment.created_at.strftime("%Y-%m-%d %H:%M:%S"),
+        "product_order_id": payment.product_order_id,
+        "customer_address": address_data,
+        "order_products": order_product_list
+    }
 
 @csrf_exempt
 def customer_get_payment_details_by_order(request):
@@ -3022,89 +3044,28 @@ def customer_get_payment_details_by_order(request):
         if action not in ['view', 'search']:
             return JsonResponse({"error": "Invalid action. Use 'view' or 'search'.", "status_code": 400}, status=400)
         if action == 'search' and not search_product_name:
-            return JsonResponse({"error": "Atleast one character is required for search action.", "status_code": 400}, status=400)
+            return JsonResponse({"error": "At least one character is required for search action.", "status_code": 400}, status=400)
 
-        payments = PaymentDetails.objects.filter(customer_id=customer_id).order_by('-created_at')
+        payments = PaymentDetails.objects.filter(customer_id=customer_id).select_related('customer').order_by('-created_at')
         if not payments.exists():
             return JsonResponse({"error": "No order details found.", "status_code": 404}, status=404)
 
-        payment_list = []
+        # Fetch all order product IDs at once
+        all_order_ids = [oid for p in payments for oid in p.order_product_ids]
+        order_products = OrderProducts.objects.filter(id__in=all_order_ids)
+        product_ids = list(order_products.values_list('product_id', flat=True))
+        products_map = ProductsDetails.objects.in_bulk(product_ids)
+        order_product_map = {op.id: op for op in order_products}
 
-        for payment in payments:
-            order_ids = payment.order_product_ids
-            order_products = OrderProducts.objects.filter(id__in=order_ids)
+        # Fetch all address IDs in one go
+        address_ids = list(set(p.customer_address_id for p in payments if p.customer_address_id))
+        address_map = CustomerAddress.objects.in_bulk(address_ids)
 
-            order_product_list = []
-            for order in order_products:
-                product = ProductsDetails.objects.filter(id=order.product_id).first()
-                if not product:
-                    continue
-
-                if action == 'search' and search_product_name.lower() not in product.product_name.lower():
-                    continue
-
-                product_image_url = f"{settings.AWS_S3_BUCKET_URL}/{product.product_images[0].replace('\\', '/')}" if product.product_images else ""
-
-                order_product_list.append({
-                    "order_product_id": order.id,
-                    "quantity": order.quantity,
-                    "price": order.price,
-                    "gst": f"{int(product.gst or 0)}%",
-                    "discount": f"{int(product.discount)}%" if product.discount else "0%",
-                    "final_price": round(float(product.price) - (float(product.price) * float(product.discount or 0) / 100), 2),
-                    "order_status": order.order_status,
-                    "shipping_status": order.shipping_status,
-                    "delivery_status": order.delivery_status,
-                    "delivery_charge": order.delivery_charge,
-                    "product_id": order.product_id,
-                    "product_image": product_image_url,
-                    "product_name": product.product_name,
-                    "delivery_charge":order.delivery_charge,
-                    "payment_status": get_display_payment_status(payment.payment_status),
-
-                })
-
-            if action == 'search' and not order_product_list:
-                continue
-
-            address_data = []
-            if payment.customer_address_id:
-                address = CustomerAddress.objects.filter(id=payment.customer_address_id).first()
-                if address:
-                    address_data.append({
-                        "address_id": address.id,
-                        "customer_name": f"{address.first_name} {address.last_name}",
-                        "email": address.email,
-                        "mobile_number": address.mobile_number,
-                        "alternate_mobile": address.alternate_mobile,
-                        "address_type": address.address_type,
-                        "pincode": address.pincode,
-                        "street": address.street,
-                        "landmark": address.landmark,
-                        "village": address.village,
-                        "mandal": address.mandal,
-                        "postoffice": address.postoffice,
-                        "district": address.district,
-                        "state": address.state,
-                        "country": address.country,
-                    })
-
-            payment_list.append({
-                "razorpay_order_id": payment.razorpay_order_id,
-                "customer_name": f"{payment.customer.first_name} {payment.customer.last_name}",
-                "email": payment.customer.email,
-                "mobile_number": payment.customer.mobile_no,
-                "payment_mode": payment.payment_mode,
-                "total_quantity": payment.quantity,
-                "total_amount": payment.total_amount,
-                "payment_date": payment.created_at.strftime("%Y-%m-%d %H:%M:%S"),
-                "product_order_id": payment.product_order_id,
-                "customer_address": address_data,
-                "order_products": order_product_list
-            })
-
-        if not payment_list:
-            return JsonResponse({"message": "No matching order details found.", "status_code": 404}, status=404)
+        payment_list = [
+            build_payment_response(payment, order_product_map, products_map, address_map, action, search_product_name)
+            for payment in payments
+        ]
+        payment_list = [p for p in payment_list if p]  # Remove None results
 
         return JsonResponse({
             "message": "Orders retrieved successfully." if action == 'view' else "Search results retrieved successfully.",
@@ -3114,7 +3075,6 @@ def customer_get_payment_details_by_order(request):
 
     except Exception as e:
         return JsonResponse({"error": str(e), "status_code": 500}, status=500)
-
 def get_display_payment_status(status):
     status = (status or '').lower()
     return {
@@ -4418,6 +4378,41 @@ def add_to_wishlist(request):
             return JsonResponse({"status": "error", "message": str(e)})
     
     return JsonResponse({"status": "error", "message": "Only POST method allowed"})
+@csrf_exempt
+def remove_from_wishlist(request):
+    if request.method == "POST":
+        try:
+            data = json.loads(request.body.decode("utf-8"))
+            customer_id = data.get("customer_id")
+            product_id = data.get("product_id")
+
+            if not customer_id or not product_id:
+                return JsonResponse({"status": "error", "message": "Both customer_id and product_id are required."}, status=400)
+
+            customer = CustomerRegisterDetails.objects.get(id=customer_id)
+            product = ProductsDetails.objects.get(id=product_id)
+
+            deleted, _ = Wishlist.objects.filter(customer=customer, product=product).delete()
+
+            if deleted:
+                return JsonResponse({
+                    "status": "success",
+                    "message": "Removed from wishlist.",
+                    "status_code": 200,
+                    "customer_id": str(customer_id)
+                })
+            else:
+                return JsonResponse({
+                    "status": "info",
+                    "message": "Item was not in wishlist.",
+                    "status_code": 404,
+                    "customer_id": str(customer_id)
+                })
+
+        except Exception as e:
+            return JsonResponse({"status": "error", "message": str(e)}, status=500)
+
+    return JsonResponse({"status": "error", "message": "Only POST method allowed."}, status=405)
 
 @csrf_exempt
 def view_wishlist(request):
@@ -4429,7 +4424,7 @@ def view_wishlist(request):
             if not customer_id:
                 return JsonResponse({"status": "error", "message": "Customer ID is required."})
             
-            wishlist_items = Wishlist.objects.filter(customer_id=customer_id).select_related("product", "product__category", "product__sub_category")
+            wishlist_items = Wishlist.objects.filter(customer_id=customer_id).select_related("product", "product__category", "product__sub_category").order_by("-created_at") 
 
             if not wishlist_items.exists():
                 return JsonResponse({

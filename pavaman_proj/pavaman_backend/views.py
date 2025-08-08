@@ -233,10 +233,10 @@ def view_categories(request):
 def edit_category(request):
     if request.method == 'POST':
         try:
-            data = json.loads(request.body.decode('utf-8'))
+            data = request.POST
             category_id = data.get('category_id')
-            category_name = data.get('category_name')
-            admin_id = request.session.get('admin_id')
+            category_name = data.get('category_name').lower()
+            admin_id = data.get('admin_id')
             if not admin_id:
                 return JsonResponse({"error": "Admin is not logged in.", "status_code": 401}, status=401)
             if not category_id:
@@ -250,7 +250,7 @@ def edit_category(request):
             if CategoryDetails.objects.filter(category_name=category_name).exclude(id=category_id).exists():
                 return JsonResponse({"error": "Category name already exists.", "status_code": 409}, status=409)
             category.category_name = category_name
-            formatted_category_name = category_name.replace(' ', '').replace('/', '')
+            formatted_category_name = category_name.replace(' ', '_').replace('/', '_')
             s3 = boto3.client(
                 's3',
                 aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
@@ -272,10 +272,7 @@ def edit_category(request):
                     try:
                         s3.delete_object(Bucket=settings.AWS_STORAGE_BUCKET_NAME, Key=category.category_image)
                     except Exception as delete_err:
-                        return JsonResponse({
-                            "error": f"Failed to delete old image: {str(delete_err)}",
-                            "status_code": 500
-                        }, status=500)
+                        print("Warning: Could not delete old image:", delete_err)
                 s3.upload_fileobj(
                     category_image,
                     settings.AWS_STORAGE_BUCKET_NAME,
@@ -285,7 +282,7 @@ def edit_category(request):
                 category.category_image = s3_file_key
             elif category.category_image:
                 old_key = category.category_image
-                original_file_name = old_key.split('/')[-1].split('_')[-1]
+                original_file_name = old_key.split('/')[-1].split('_')[-1] 
                 new_key = f"static/images/category/{formatted_category_name}_{original_file_name}"
                 if old_key != new_key:
                     try:
@@ -299,10 +296,7 @@ def edit_category(request):
                         s3.delete_object(Bucket=settings.AWS_STORAGE_BUCKET_NAME, Key=old_key)
                         category.category_image = new_key
                     except Exception as rename_err:
-                        return JsonResponse({
-                            "error": f"Failed to rename image on S3: {str(rename_err)}",
-                            "status_code": 500
-                        }, status=500)
+                        print("Warning: Could not rename image on S3:", rename_err)
             category.save()
             image_url = f"https://{settings.AWS_STORAGE_BUCKET_NAME}.s3.{settings.AWS_S3_REGION_NAME}.amazonaws.com/{category.category_image}" if category.category_image else None
             return JsonResponse({
